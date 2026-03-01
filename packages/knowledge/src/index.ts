@@ -1,0 +1,11 @@
+export { KnowledgeBase } from './knowledge-base.js';
+export type { KnowledgeConfig } from './knowledge-base.js';
+export { chunkText } from './chunker.js';
+export type { ChunkOptions } from './chunker.js';
+export { BaseSource } from './sources/base-source.js';
+export type { KnowledgeDocument, KnowledgeSourceConfig } from './sources/base-source.js';
+export { ObsidianSource } from './sources/obsidian.js';
+export { GranolaSource } from './sources/granola.js';
+export { PlaudSource } from './sources/plaud.js';
+export { PdfSource } from './sources/pdf.js';
+export { WebSource } from './sources/web.js';

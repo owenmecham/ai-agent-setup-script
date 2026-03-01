@@ -1,0 +1,90 @@
+agent:
+  name: "Murph"
+  model: "sonnet"
+  max_budget_per_message_usd: 0.50
+  timezone: "America/Denver"
+
+database:
+  url: "postgresql://localhost:5432/murph"
+
+embedding:
+  provider: "ollama"
+  model: "nomic-embed-text"
+  ollama_url: "http://localhost:11434"
+
+security:
+  dashboard_port: 3141
+  approval_defaults:
+    gmail.send: require
+    gmail.read: auto
+    imessage.send: require
+    telegram.send: notify
+    bop.*: require
+    mcp.*: require
+    playwright.*: notify
+    cloudflare.deploy: require
+    creator.*: require
+    scheduler.create: notify
+    hubspot.*: notify
+    gohighlevel.*: notify
+    knowledge.ingest: auto
+    knowledge.delete: require
+
+channels:
+  imessage:
+    enabled: false
+    bluebubbles_url: "http://localhost:1234"
+    bluebubbles_password: "${BLUEBUBBLES_PASSWORD}"
+    webhook_port: 3142
+  telegram:
+    enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    allowed_user_ids: []
+
+knowledge:
+  sources:
+    obsidian:
+      enabled: false
+      vault_path: "/Users/owenmecham/obsidian-vault"
+      watch: true
+    granola:
+      enabled: false
+    plaud:
+      enabled: false
+
+mcp_servers: []
+
+integrations:
+  bop:
+    enabled: false
+  gmail:
+    enabled: false
+  gdrive:
+    enabled: false
+  gohighlevel:
+    enabled: false
+  hubspot:
+    enabled: false
+  playwright:
+    enabled: true
+  cloudflare:
+    enabled: false
+
+creator:
+  enabled: false
+  deploy_target: "cloudflare"
+  project_prefix: "murph-gen"
+
+scheduler:
+  enabled: false
+
+memory:
+  short_term_buffer_size: 50
+  flush_interval_seconds: 30
+  semantic_search_limit: 5
+  knowledge_search_limit: 5
+  max_context_tokens: 4000
+
+logging:
+  level: "info"
+  file: "~/.murph/murph.log"
