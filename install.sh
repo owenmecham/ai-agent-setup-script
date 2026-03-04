@@ -413,22 +413,11 @@ echo "  Installing project dependencies..."
 echo "======================================"
 pnpm install
 
-# 13. Playwright (runs after pnpm install so the package is available)
+# 13. Playwright Chromium (idempotent — skips if already downloaded)
 check "Playwright Chromium"
-if npx playwright --version &>/dev/null 2>&1; then
-  # Check if chromium browser is actually installed
-  if npx playwright install --dry-run 2>&1 | grep -q "chromium"; then
-    installing
-    npx playwright install chromium
-    ok
-  else
-    skip
-  fi
-else
-  installing
-  npx playwright install chromium
-  ok
-fi
+installing
+pnpm dlx playwright@latest install chromium
+ok
 
 echo ""
 echo "======================================"
