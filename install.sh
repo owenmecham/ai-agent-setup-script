@@ -56,7 +56,33 @@ else
   brew install git
 fi
 
-# 5. Node.js (via nvm)
+# 5. Murph source code
+REPO_URL="https://github.com/owenmecham/ai-agent-setup-script.git"
+INSTALL_DIR="$HOME/murph"
+
+# Detect if we're already inside the repo
+if git -C "$(pwd)" remote get-url origin 2>/dev/null | grep -q "ai-agent-setup-script"; then
+  INSTALL_DIR="$(pwd)"
+fi
+
+check "Murph source code"
+if [ -d "$INSTALL_DIR/.git" ]; then
+  # Existing install — pull latest
+  echo -e "${YELLOW}Updating...${NC}"
+  git -C "$INSTALL_DIR" pull --ff-only || {
+    fail "Git pull failed. Resolve conflicts in $INSTALL_DIR and re-run."
+    exit 1
+  }
+else
+  installing
+  git clone "$REPO_URL" "$INSTALL_DIR"
+fi
+ok
+
+# Change to install directory for remaining steps
+cd "$INSTALL_DIR"
+
+# 6. Node.js (via nvm)
 check "Node.js 20+"
 NODE_MAJOR=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
 if [[ "$NODE_MAJOR" -ge 20 ]]; then
@@ -238,6 +264,12 @@ pnpm install
 
 echo ""
 echo "======================================"
+echo "  Building Murph..."
+echo "======================================"
+pnpm build
+
+echo ""
+echo "======================================"
 echo "  Running database migrations..."
 echo "======================================"
 pnpm run migrate
@@ -316,9 +348,11 @@ echo -e "${GREEN}======================================"
 echo "  Murph installation complete!"
 echo "======================================${NC}"
 echo ""
+echo "Installed to: $INSTALL_DIR"
+echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Edit murph.config.yaml with your settings"
+echo "  1. Edit $INSTALL_DIR/murph.config.yaml with your settings"
 echo "  2. Set up secrets:"
 echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
 echo "     pnpm murph secret set BLUEBUBBLES_PASSWORD <your-password>"
@@ -343,5 +377,8 @@ echo "  6. Run diagnostics:"
 echo "     pnpm murph doctor"
 echo ""
 echo "  7. Start Murph:"
-echo "     pnpm murph start"
+echo "     cd $INSTALL_DIR && pnpm murph start"
+echo ""
+echo "  To update Murph later, re-run:"
+echo "     $INSTALL_DIR/install.sh"
 echo ""
