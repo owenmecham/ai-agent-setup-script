@@ -35,6 +35,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - All actions go through approval gates (default: strictest)
 - All actions logged to `audit_log` table
 - Database migrations in `packages/*/src/migrations/*.sql`
+- **Always update documentation**: When changing commands, flags, configuration, APIs, or user-facing behavior, update `CLAUDE.md` (and any relevant README files) in the same changeset. Documentation should never drift from the code.
 
 ## Commands
 
@@ -42,6 +43,31 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - `pnpm murph start` — Start the agent
 - `pnpm murph secret set/list/delete` — Manage secrets
 - `pnpm run migrate` — Run database migrations
+
+## Installation & Updates
+
+Fresh install on a new Mac:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/owenmecham/ai-agent-setup-script/main/install.sh -o /tmp/murph-install.sh && bash /tmp/murph-install.sh
+```
+
+Code-only update (skips tool checks, safe restart):
+
+```bash
+~/murph/install.sh --update
+```
+
+Full re-install (re-checks all tools + code):
+
+```bash
+~/murph/install.sh
+```
+
+### install.sh flags
+
+- `--update` / `-u` — Fast code-only update: pull, install deps, build, migrate, restart. The old process keeps running until the new build succeeds.
+- `--yes` / `-y` — Skip the prerequisite confirmation prompt. Flags can be combined (`--update --yes`).
 
 ## Database
 

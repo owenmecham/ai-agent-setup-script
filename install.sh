@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "======================================"
-echo "  Murph AI Agent Framework Installer"
-echo "======================================"
-echo ""
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,6 +12,87 @@ ok() { echo -e "${GREEN}OK${NC}"; }
 installing() { echo -e "${YELLOW}Installing...${NC}"; }
 skip() { echo -e "${GREEN}Already installed${NC}"; }
 fail() { echo -e "${RED}FAILED${NC}"; echo "  $1"; }
+
+# Parse flags
+UPDATE_ONLY=false
+SKIP_CONFIRM=false
+for arg in "$@"; do
+  case "$arg" in
+    --update|-u) UPDATE_ONLY=true ;;
+    --yes|-y) SKIP_CONFIRM=true ;;
+  esac
+done
+
+# --- Update-only path ---
+if [ "$UPDATE_ONLY" = true ]; then
+  echo "======================================"
+  echo "  Murph Update"
+  echo "======================================"
+  echo ""
+
+  # Detect install directory
+  INSTALL_DIR="$HOME/murph"
+  if git -C "$(pwd)" remote get-url origin 2>/dev/null | grep -q "ai-agent-setup-script"; then
+    INSTALL_DIR="$(pwd)"
+  fi
+
+  # Pull latest code
+  check "Pulling latest code"
+  if git -C "$INSTALL_DIR" pull --ff-only; then
+    ok
+  else
+    fail "Git pull failed. Run the full installer or resolve conflicts in $INSTALL_DIR."
+    exit 1
+  fi
+
+  cd "$INSTALL_DIR"
+
+  # Install deps, build, migrate
+  echo ""
+  echo "Installing dependencies..."
+  pnpm install
+
+  echo ""
+  echo "Building..."
+  pnpm build
+
+  echo ""
+  echo "Running migrations..."
+  pnpm run migrate
+
+  # Stop old process and restart
+  echo ""
+  check "Stopping Murph"
+  if pkill -f "tsx packages/core/src/cli.ts" 2>/dev/null; then
+    sleep 2
+    ok
+  else
+    echo -e "${YELLOW}Not running${NC}"
+  fi
+
+  check "Starting Murph"
+  nohup pnpm murph start >> "$INSTALL_DIR/murph.log" 2>&1 &
+  sleep 3
+
+  # Quick health check
+  if pgrep -f "tsx packages/core/src/cli.ts" &>/dev/null; then
+    ok
+  else
+    fail "Murph failed to start. Check $INSTALL_DIR/murph.log"
+    exit 1
+  fi
+
+  echo ""
+  echo -e "${GREEN}Update complete! Murph is running.${NC}"
+  echo "Logs: $INSTALL_DIR/murph.log"
+  exit 0
+fi
+
+# --- Full install path ---
+echo "======================================"
+echo "  Murph AI Agent Framework Installer"
+echo "======================================"
+echo ""
 
 # Prerequisites check
 echo "Before running this installer, ensure the following are complete:"
@@ -30,7 +106,7 @@ echo "     - Open Messages.app > Settings > iMessage > Sign In"
 echo ""
 
 # Allow skipping with --yes flag (for updates/CI)
-if [[ "${1:-}" != "--yes" && "${1:-}" != "-y" ]]; then
+if [ "$SKIP_CONFIRM" = false ]; then
   read -rp "Have you completed these steps? (y/N) " prereq_confirm
   if [[ "$prereq_confirm" != [yY] ]]; then
     echo "Please complete the prerequisites above and re-run this script."
@@ -418,6 +494,9 @@ echo ""
 echo "  7. Start Murph:"
 echo "     cd $INSTALL_DIR && pnpm murph start"
 echo ""
-echo "  To update Murph later, re-run:"
+echo "  To update Murph later (code only):"
+echo "     $INSTALL_DIR/install.sh --update"
+echo ""
+echo "  For a full re-install (tools + code):"
 echo "     $INSTALL_DIR/install.sh"
 echo ""
