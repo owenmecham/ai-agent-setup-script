@@ -18,6 +18,27 @@ installing() { echo -e "${YELLOW}Installing...${NC}"; }
 skip() { echo -e "${GREEN}Already installed${NC}"; }
 fail() { echo -e "${RED}FAILED${NC}"; echo "  $1"; }
 
+# Prerequisites check
+echo "Before running this installer, ensure the following are complete:"
+echo ""
+echo "  1. A dedicated Apple ID has been created for this machine"
+echo "     - Create one at https://appleid.apple.com"
+echo "  2. This Mac is signed into that Apple ID"
+echo "     - System Settings > Apple ID > Sign In"
+echo "  3. iMessage is signed in and active with that Apple ID"
+echo "     - Open Messages.app > Settings > iMessage > Sign In"
+echo ""
+
+# Allow skipping with --yes flag (for updates/CI)
+if [[ "${1:-}" != "--yes" && "${1:-}" != "-y" ]]; then
+  read -rp "Have you completed these steps? (y/N) " prereq_confirm
+  if [[ "$prereq_confirm" != [yY] ]]; then
+    echo "Please complete the prerequisites above and re-run this script."
+    exit 0
+  fi
+fi
+echo ""
+
 # 1. macOS check
 check "macOS"
 if [[ "$(uname)" != "Darwin" ]]; then
@@ -238,7 +259,16 @@ else
   npm install -g @anthropic-ai/claude-code
 fi
 
-# 11. Wrangler (Cloudflare)
+# 11. Claude Desktop
+check "Claude Desktop"
+if [ -d "/Applications/Claude.app" ]; then
+  skip
+else
+  installing
+  brew install --cask claude
+fi
+
+# 12. Wrangler (Cloudflare)
 check "Wrangler CLI"
 if command -v wrangler &>/dev/null; then
   skip
@@ -247,7 +277,7 @@ else
   pnpm add -g wrangler
 fi
 
-# 12. Playwright
+# 13. Playwright
 check "Playwright Chromium"
 if npx playwright --version &>/dev/null 2>&1; then
   skip
@@ -323,6 +353,15 @@ if command -v claude &>/dev/null; then
   ok
 else
   fail "claude command not found in PATH"
+  VERIFY_PASS=false
+fi
+
+# Verify Claude Desktop
+check "Claude Desktop"
+if [ -d "/Applications/Claude.app" ]; then
+  ok
+else
+  fail "Claude Desktop not found in /Applications"
   VERIFY_PASS=false
 fi
 
