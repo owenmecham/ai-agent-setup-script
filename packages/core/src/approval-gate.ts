@@ -86,6 +86,10 @@ export class ApprovalGate extends EventEmitter {
     }
   }
 
+  updateDefaults(defaults: Record<string, ApprovalLevel>): void {
+    this.approvalDefaults = defaults;
+  }
+
   resolve(requestId: string, approved: boolean, resolvedBy?: string): void {
     this.emit(`approval-${requestId}`, approved, resolvedBy);
   }

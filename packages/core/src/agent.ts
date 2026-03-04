@@ -4,7 +4,9 @@ import { ClaudeBridge } from './claude-bridge.js';
 import { ActionRegistry } from './action-registry.js';
 import { ApprovalGate } from './approval-gate.js';
 import { AuditLogger } from './audit-logger.js';
+import { AgentAPI } from './agent-api.js';
 import { createLogger } from './logger.js';
+import type { ConfigManager, ConfigChangeEvent } from '@murph/config';
 
 const logger = createLogger('agent');
 
@@ -26,13 +28,62 @@ export class Agent {
   private memory: MemoryInterface | null = null;
   private channels: ChannelAdapter[] = [];
   private config: MurphConfig;
+  private configManager: ConfigManager | null = null;
+  private agentAPI: AgentAPI | null = null;
 
-  constructor(config: MurphConfig) {
+  constructor(config: MurphConfig, configManager?: ConfigManager) {
     this.config = config;
+    this.configManager = configManager ?? null;
     this.bridge = new ClaudeBridge(config.agent.model);
     this.registry = new ActionRegistry();
     this.approvalGate = new ApprovalGate(config);
     this.auditLogger = new AuditLogger();
+
+    if (this.configManager) {
+      this.configManager.on('config:changed', (event: ConfigChangeEvent) => {
+        this.handleConfigChange(event);
+      });
+    }
+  }
+
+  private handleConfigChange(event: ConfigChangeEvent): void {
+    const { current, changedPaths } = event;
+    logger.info({ changedPaths }, 'Config changed, applying hot reload');
+
+    this.config = current;
+
+    for (const path of changedPaths) {
+      if (path === 'agent.model') {
+        this.bridge.setModel(current.agent.model);
+        logger.info({ model: current.agent.model }, 'Model updated');
+      }
+
+      if (path.startsWith('security.approval_defaults')) {
+        this.approvalGate.updateDefaults(current.security.approval_defaults);
+        logger.info('Approval defaults updated');
+      }
+
+      if (path === 'logging.level') {
+        import('./logger.js').then(({ setLogLevel }) => {
+          setLogLevel(current.logging.level);
+          logger.info({ level: current.logging.level }, 'Log level updated');
+        }).catch(() => {
+          // setLogLevel might not be available
+        });
+      }
+    }
+  }
+
+  getConfig(): MurphConfig {
+    return this.config;
+  }
+
+  getConfigManager(): ConfigManager | null {
+    return this.configManager;
+  }
+
+  getChannels(): ChannelAdapter[] {
+    return this.channels;
   }
 
   getRegistry(): ActionRegistry {
@@ -162,6 +213,17 @@ export class Agent {
 
   async start(): Promise<void> {
     logger.info({ name: this.config.agent.name }, 'Starting agent');
+
+    // Start Agent HTTP API
+    const apiPort = (this.config.agent as any).api_port ?? 3140;
+    this.agentAPI = new AgentAPI(this, this.configManager, apiPort);
+    await this.agentAPI.start();
+
+    // Start file watcher if ConfigManager is available
+    if (this.configManager) {
+      await this.configManager.watch();
+    }
+
     for (const channel of this.channels) {
       await channel.start();
       logger.info({ channel: channel.name }, 'Channel started');
@@ -170,6 +232,15 @@ export class Agent {
 
   async stop(): Promise<void> {
     logger.info('Stopping agent');
+
+    if (this.agentAPI) {
+      await this.agentAPI.stop();
+    }
+
+    if (this.configManager) {
+      await this.configManager.unwatch();
+    }
+
     for (const channel of this.channels) {
       await channel.stop();
     }

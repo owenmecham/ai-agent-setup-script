@@ -11,6 +11,7 @@ const navItems = [
   { href: '/scheduler', label: 'Scheduler', icon: '⏰' },
   { href: '/integrations', label: 'Integrations', icon: '🔌' },
   { href: '/audit', label: 'Audit Log', icon: '📋' },
+  { href: '/secrets', label: 'Secrets', icon: '🔐' },
   { href: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 

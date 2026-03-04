@@ -4,14 +4,58 @@ export async function GET(_request: NextRequest) {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       // Send initial connection event
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: 'connected' })}\n\n`),
       );
 
-      // In production, this would subscribe to ApprovalGate events
-      // and push approval requests to the client
+      // Try to connect to agent IPC for real-time events
+      try {
+        const { createConnection } = await import('node:net');
+        const { homedir } = await import('node:os');
+        const { join } = await import('node:path');
+
+        const socketPath = join(homedir(), '.murph', 'agent.sock');
+
+        const socket = createConnection(socketPath, () => {
+          // Subscribe to approval events by sending a status request
+          // The agent will push events as they happen
+        });
+
+        let buffer = '';
+        socket.on('data', (data) => {
+          buffer += data.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const msg = JSON.parse(line);
+              if (msg.event === 'approval-required') {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ type: 'approval', ...msg.data })}\n\n`)
+                );
+              }
+            } catch {
+              // Ignore
+            }
+          }
+        });
+
+        socket.on('close', () => {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'disconnected' })}\n\n`)
+          );
+        });
+
+        socket.on('error', () => {
+          // Agent not running, just keep alive
+        });
+      } catch {
+        // No IPC connection available
+      }
 
       // Keep-alive ping every 30 seconds
       const interval = setInterval(() => {

@@ -30,6 +30,10 @@ export class ClaudeBridge {
     this.model = model;
   }
 
+  setModel(model: string): void {
+    this.model = model;
+  }
+
   async reason(context: AgentContext, userMessage: string): Promise<ClaudeBridgeResponse> {
     const prompt = this.buildPrompt(context, userMessage);
 

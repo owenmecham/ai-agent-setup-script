@@ -34,7 +34,7 @@ else
   installing
   xcode-select --install 2>/dev/null || true
   echo "  Please complete the Xcode CLI tools installation and re-run this script."
-  exit 0
+  exit 1
 fi
 
 # 3. Homebrew
@@ -108,23 +108,57 @@ else
   brew install pgvector
 fi
 
+# Verify PostgreSQL is running with retry loop
 check "PostgreSQL service"
 if brew services list | grep postgresql@16 | grep started &>/dev/null; then
   skip
 else
   installing
   brew services start postgresql@16
-  sleep 2
+
+  PG_READY=false
+  for i in 1 2 3 4 5; do
+    if pg_isready -q 2>/dev/null; then
+      PG_READY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$PG_READY" = false ]; then
+    fail "PostgreSQL failed to start after 10 seconds. Check: brew services list"
+    exit 1
+  fi
+  ok
 fi
 
+# Create database with proper error checking
 check "Murph database"
 if psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw murph; then
   skip
 else
   installing
-  createdb murph 2>/dev/null || true
-  psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' 2>/dev/null || true
-  psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";' 2>/dev/null || true
+  if ! createdb murph 2>/dev/null; then
+    fail "Failed to create database 'murph'. Check PostgreSQL is running and your user has permissions."
+    exit 1
+  fi
+
+  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' 2>/dev/null; then
+    fail "Failed to create uuid-ossp extension."
+    exit 1
+  fi
+
+  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";' 2>/dev/null; then
+    fail "Failed to create vector extension. Make sure pgvector is installed."
+    exit 1
+  fi
+
+  # Verify database is accessible
+  if ! psql -d murph -c "SELECT 1;" &>/dev/null; then
+    fail "Database 'murph' was created but is not accessible."
+    exit 1
+  fi
+  ok
 fi
 
 # 9. Ollama
@@ -134,6 +168,31 @@ if command -v ollama &>/dev/null; then
 else
   installing
   brew install ollama
+fi
+
+# Ensure Ollama is running before pulling models
+check "Ollama service"
+if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+  skip
+else
+  installing
+  ollama serve &>/dev/null &
+  OLLAMA_PID=$!
+
+  OLLAMA_READY=false
+  for i in 1 2 3 4 5 6; do
+    if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+      OLLAMA_READY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$OLLAMA_READY" = false ]; then
+    fail "Ollama failed to start. Try running 'ollama serve' manually."
+    exit 1
+  fi
+  ok
 fi
 
 check "Ollama nomic-embed-text model"
@@ -184,6 +243,75 @@ echo "======================================"
 pnpm run migrate
 
 echo ""
+echo "======================================"
+echo "  Running post-install verification..."
+echo "======================================"
+
+VERIFY_PASS=true
+
+# Verify PostgreSQL connection
+check "PostgreSQL connection"
+if psql -d murph -c "SELECT 1;" &>/dev/null; then
+  ok
+else
+  fail "Cannot connect to database"
+  VERIFY_PASS=false
+fi
+
+# Verify extensions
+check "PostgreSQL extensions"
+if psql -d murph -c "SELECT extname FROM pg_extension WHERE extname IN ('uuid-ossp', 'vector');" 2>/dev/null | grep -q vector; then
+  ok
+else
+  fail "Required extensions missing"
+  VERIFY_PASS=false
+fi
+
+# Verify Ollama responding
+check "Ollama API"
+if curl -sf http://localhost:11434/api/tags &>/dev/null; then
+  ok
+else
+  fail "Ollama not responding at http://localhost:11434"
+  VERIFY_PASS=false
+fi
+
+# Verify nomic-embed-text model
+check "nomic-embed-text model"
+if ollama list 2>/dev/null | grep -q nomic-embed-text; then
+  ok
+else
+  fail "nomic-embed-text model not found"
+  VERIFY_PASS=false
+fi
+
+# Verify Claude CLI
+check "Claude CLI"
+if command -v claude &>/dev/null; then
+  ok
+else
+  fail "claude command not found in PATH"
+  VERIFY_PASS=false
+fi
+
+# Verify node_modules
+check "node_modules"
+if [ -d "node_modules" ]; then
+  ok
+else
+  fail "node_modules directory missing"
+  VERIFY_PASS=false
+fi
+
+if [ "$VERIFY_PASS" = false ]; then
+  echo ""
+  echo -e "${YELLOW}Installation completed with warnings. Run 'pnpm murph doctor' for details.${NC}"
+else
+  echo ""
+  echo -e "${GREEN}All post-install checks passed.${NC}"
+fi
+
+echo ""
 echo -e "${GREEN}======================================"
 echo "  Murph installation complete!"
 echo "======================================${NC}"
@@ -211,6 +339,9 @@ echo "  5. macOS Permissions:"
 echo "     - Grant Full Disk Access to your terminal app"
 echo "     - Grant Accessibility access for AppleScript"
 echo ""
-echo "  6. Start Murph:"
+echo "  6. Run diagnostics:"
+echo "     pnpm murph doctor"
+echo ""
+echo "  7. Start Murph:"
 echo "     pnpm murph start"
 echo ""

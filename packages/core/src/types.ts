@@ -1,3 +1,8 @@
+import type { ApprovalLevel as _ApprovalLevel, MurphConfig as _MurphConfig } from '@murph/config';
+
+export type ApprovalLevel = _ApprovalLevel;
+export type MurphConfig = _MurphConfig;
+
 export interface MurphMessage {
   id: string;
   conversationId: string;
@@ -20,8 +25,6 @@ export interface Action {
   parameters: Record<string, unknown>;
   approval: ApprovalLevel;
 }
-
-export type ApprovalLevel = 'auto' | 'notify' | 'require';
 
 export interface ActionResult {
   actionId: string;
@@ -100,81 +103,4 @@ export interface AuditEntry {
   parameters?: Record<string, unknown>;
   result?: unknown;
   error?: string;
-}
-
-export interface MurphConfig {
-  agent: {
-    name: string;
-    model: string;
-    max_budget_per_message_usd: number;
-    timezone: string;
-  };
-  database: {
-    url: string;
-  };
-  embedding: {
-    provider: string;
-    model: string;
-    ollama_url: string;
-  };
-  security: {
-    dashboard_port: number;
-    approval_defaults: Record<string, ApprovalLevel>;
-  };
-  channels: {
-    imessage: {
-      enabled: boolean;
-      bluebubbles_url: string;
-      bluebubbles_password: string;
-      webhook_port: number;
-    };
-    telegram: {
-      enabled: boolean;
-      bot_token: string;
-      allowed_user_ids: number[];
-    };
-  };
-  knowledge: {
-    sources: {
-      obsidian: {
-        enabled: boolean;
-        vault_path: string;
-        watch: boolean;
-      };
-      granola: {
-        enabled: boolean;
-      };
-      plaud: {
-        enabled: boolean;
-      };
-    };
-  };
-  mcp_servers: Array<{
-    name: string;
-    transport: 'stdio' | 'http';
-    url?: string;
-    command?: string;
-    args?: string[];
-    headers?: Record<string, string>;
-  }>;
-  integrations: Record<string, { enabled: boolean } & Record<string, unknown>>;
-  creator: {
-    enabled: boolean;
-    deploy_target: string;
-    project_prefix: string;
-  };
-  scheduler: {
-    enabled: boolean;
-  };
-  memory: {
-    short_term_buffer_size: number;
-    flush_interval_seconds: number;
-    semantic_search_limit: number;
-    knowledge_search_limit: number;
-    max_context_tokens: number;
-  };
-  logging: {
-    level: string;
-    file: string;
-  };
 }

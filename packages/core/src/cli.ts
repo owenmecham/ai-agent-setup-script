@@ -54,17 +54,56 @@ async function main() {
     }
 
     case 'start': {
-      const config = loadConfig();
+      const { getConfigManager } = await import('./config.js');
+      const configManager = getConfigManager();
+      const config = configManager.load();
       initLogger(config.logging.level, config.logging.file);
       const { Agent } = await import('./agent.js');
-      const agent = new Agent(config);
+      const { IPCServer } = await import('./ipc-server.js');
+
+      const agent = new Agent(config, configManager);
+      const ipcServer = new IPCServer(agent);
+
+      // Start IPC server and set up event forwarding
+      await ipcServer.start();
+      ipcServer.setupEventForwarding();
+
       // Additional setup would go here (memory, channels, etc.)
       await agent.start();
 
       process.on('SIGINT', async () => {
         await agent.stop();
+        await ipcServer.stop();
         process.exit(0);
       });
+
+      process.on('SIGTERM', async () => {
+        await agent.stop();
+        await ipcServer.stop();
+        process.exit(0);
+      });
+      break;
+    }
+
+    case 'doctor': {
+      const { runDoctor, printDoctorResult } = await import('./doctor.js');
+      const result = await runDoctor();
+      printDoctorResult(result);
+      process.exit(result.failed > 0 ? 1 : 0);
+      break;
+    }
+
+    case 'tui': {
+      // Dynamic import to launch TUI — use string variable to avoid TS
+      // resolving the module at compile time (tui is not a core dependency)
+      const tuiModule = '@murph/tui';
+      try {
+        await import(/* webpackIgnore: true */ tuiModule);
+      } catch (err) {
+        console.error('Failed to launch TUI. Make sure @murph/tui is built.');
+        console.error(err instanceof Error ? err.message : err);
+        process.exit(1);
+      }
       break;
     }
 
@@ -73,6 +112,8 @@ async function main() {
       console.log('');
       console.log('Commands:');
       console.log('  start              Start the agent');
+      console.log('  tui                Launch terminal UI');
+      console.log('  doctor             Run system diagnostics');
       console.log('  secret set <n> <v> Store a secret');
       console.log('  secret list        List all secrets');
       console.log('  secret delete <n>  Delete a secret');

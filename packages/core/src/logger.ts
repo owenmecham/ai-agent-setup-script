@@ -29,3 +29,9 @@ export function createLogger(name: string): pino.Logger {
   }
   return rootLogger.child({ module: name });
 }
+
+export function setLogLevel(level: string): void {
+  if (rootLogger) {
+    rootLogger.level = level;
+  }
+}

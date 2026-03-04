@@ -45,7 +45,7 @@ knowledge:
   sources:
     obsidian:
       enabled: false
-      vault_path: "/Users/owenmecham/obsidian-vault"
+      vault_path: ""
       watch: true
     granola:
       enabled: false
