@@ -262,6 +262,13 @@ else
   ok
 fi
 
+# Verify pgvector shared library is where PostgreSQL expects it
+PG_PKGLIB="$(pg_config --pkglibdir 2>/dev/null)"
+if [ -n "$PG_PKGLIB" ] && [ ! -f "$PG_PKGLIB/vector.dylib" ]; then
+  echo "  pgvector library not found in $PG_PKGLIB — reinstalling pgvector..."
+  brew reinstall pgvector
+fi
+
 # Verify PostgreSQL is running with retry loop
 check "PostgreSQL service"
 if brew services list | grep postgresql@16 | grep started &>/dev/null; then
@@ -297,14 +304,18 @@ else
     exit 1
   fi
 
-  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";' 2>/dev/null; then
+  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'; then
     fail "Failed to create uuid-ossp extension."
     exit 1
   fi
 
-  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";' 2>/dev/null; then
-    fail "Failed to create vector extension. Make sure pgvector is installed."
-    exit 1
+  if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";'; then
+    echo "  Retrying after pgvector reinstall..."
+    brew reinstall pgvector
+    if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";'; then
+      fail "Failed to create vector extension. Check: ls \"\$(pg_config --pkglibdir)/vector.dylib\""
+      exit 1
+    fi
   fi
 
   # Verify database is accessible
