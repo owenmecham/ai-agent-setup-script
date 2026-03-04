@@ -230,6 +230,11 @@ else
   ok
 fi
 
+# Ensure pnpm global bin directory exists (needed for pnpm add -g)
+export PNPM_HOME="$HOME/Library/pnpm"
+mkdir -p "$PNPM_HOME"
+export PATH="$PNPM_HOME:$PATH"
+
 # 7. Python 3
 check "Python 3"
 if command -v python3 &>/dev/null; then
