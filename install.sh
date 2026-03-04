@@ -259,19 +259,21 @@ fi
 export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
 
 check "pgvector extension"
-if brew list pgvector &>/dev/null; then
+PG_CONFIG="/opt/homebrew/opt/postgresql@16/bin/pg_config"
+VECTOR_CONTROL="$("$PG_CONFIG" --sharedir)/extension/vector.control"
+if [ -f "$VECTOR_CONTROL" ]; then
   skip
 else
   installing
-  brew install pgvector
+  # Build from source against postgresql@16 (brew pgvector targets the
+  # default postgresql formula, which may be a different major version)
+  brew install gcc make git 2>/dev/null || true
+  PGVECTOR_TMPDIR="$(mktemp -d)"
+  git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git "$PGVECTOR_TMPDIR"
+  make -C "$PGVECTOR_TMPDIR" PG_CONFIG="$PG_CONFIG"
+  make -C "$PGVECTOR_TMPDIR" install PG_CONFIG="$PG_CONFIG"
+  rm -rf "$PGVECTOR_TMPDIR"
   ok
-fi
-
-# Verify pgvector shared library is where PostgreSQL expects it
-PG_PKGLIB="$(pg_config --pkglibdir 2>/dev/null)"
-if [ -n "$PG_PKGLIB" ] && [ ! -f "$PG_PKGLIB/vector.dylib" ]; then
-  echo "  pgvector library not found in $PG_PKGLIB — reinstalling pgvector..."
-  brew reinstall pgvector
 fi
 
 # Verify PostgreSQL is running with retry loop
@@ -315,12 +317,8 @@ else
   fi
 
   if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";'; then
-    echo "  Retrying after pgvector reinstall..."
-    brew reinstall pgvector
-    if ! psql -d murph -c 'CREATE EXTENSION IF NOT EXISTS "vector";'; then
-      fail "Failed to create vector extension. Check: ls \"\$(pg_config --pkglibdir)/vector.dylib\""
-      exit 1
-    fi
+    fail "Failed to create vector extension. Verify pgvector is installed: ls \"\$(pg_config --sharedir)/extension/vector.control\""
+    exit 1
   fi
 
   # Verify database is accessible
@@ -405,21 +403,32 @@ else
   ok
 fi
 
-# 13. Playwright
-check "Playwright Chromium"
-if npx playwright --version &>/dev/null 2>&1; then
-  skip
-else
-  installing
-  npx playwright install chromium
-  ok
-fi
+# 13. Playwright (installed after pnpm install; just mark as pending here)
+# Playwright browsers are installed after pnpm install below, since
+# npx would otherwise prompt to download the package and hang the script.
 
 echo ""
 echo "======================================"
 echo "  Installing project dependencies..."
 echo "======================================"
 pnpm install
+
+# 13. Playwright (runs after pnpm install so the package is available)
+check "Playwright Chromium"
+if npx playwright --version &>/dev/null 2>&1; then
+  # Check if chromium browser is actually installed
+  if npx playwright install --dry-run 2>&1 | grep -q "chromium"; then
+    installing
+    npx playwright install chromium
+    ok
+  else
+    skip
+  fi
+else
+  installing
+  npx playwright install chromium
+  ok
+fi
 
 echo ""
 echo "======================================"
