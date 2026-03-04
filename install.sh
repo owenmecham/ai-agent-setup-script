@@ -130,8 +130,24 @@ if xcode-select -p &>/dev/null; then
 else
   installing
   xcode-select --install 2>/dev/null || true
-  echo "  Please complete the Xcode CLI tools installation and re-run this script."
-  exit 1
+  echo ""
+  echo "  Xcode CLI tools installer launched."
+  echo "  Please click 'Install' in the dialog that appeared."
+  echo ""
+  printf "  Waiting for installation to complete"
+  XCODE_TRIES=0
+  until xcode-select -p &>/dev/null; do
+    XCODE_TRIES=$((XCODE_TRIES + 1))
+    if [ "$XCODE_TRIES" -ge 120 ]; then
+      echo ""
+      fail "Timed out waiting for Xcode CLI tools. Please install manually and re-run."
+      exit 1
+    fi
+    printf "."
+    sleep 5
+  done
+  echo ""
+  ok
 fi
 
 # 3. Homebrew
@@ -141,7 +157,13 @@ if command -v brew &>/dev/null; then
 else
   installing
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+  # Add brew to PATH for the rest of this script (Apple Silicon or Intel)
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+  ok
 fi
 
 # 4. Git
@@ -151,6 +173,7 @@ if command -v git &>/dev/null; then
 else
   installing
   brew install git
+  ok
 fi
 
 # 5. Murph source code
@@ -193,6 +216,7 @@ else
   fi
   nvm install 20
   nvm use 20
+  ok
 fi
 
 # 6. pnpm
@@ -203,6 +227,7 @@ else
   installing
   corepack enable
   corepack prepare pnpm@latest --activate
+  ok
 fi
 
 # 7. Python 3
@@ -212,6 +237,7 @@ if command -v python3 &>/dev/null; then
 else
   installing
   brew install python@3.12
+  ok
 fi
 
 # 8. PostgreSQL + pgvector
@@ -221,6 +247,7 @@ if brew list postgresql@16 &>/dev/null; then
 else
   installing
   brew install postgresql@16
+  ok
 fi
 
 check "pgvector extension"
@@ -229,6 +256,7 @@ if brew list pgvector &>/dev/null; then
 else
   installing
   brew install pgvector
+  ok
 fi
 
 # Verify PostgreSQL is running with retry loop
@@ -291,6 +319,7 @@ if command -v ollama &>/dev/null; then
 else
   installing
   brew install ollama
+  ok
 fi
 
 # Ensure Ollama is running before pulling models
@@ -324,6 +353,7 @@ if ollama list 2>/dev/null | grep -q nomic-embed-text; then
 else
   installing
   ollama pull nomic-embed-text
+  ok
 fi
 
 # 10. Claude Code CLI
@@ -333,6 +363,7 @@ if command -v claude &>/dev/null; then
 else
   installing
   npm install -g @anthropic-ai/claude-code
+  ok
 fi
 
 # 11. Claude Desktop
@@ -342,6 +373,7 @@ if [ -d "/Applications/Claude.app" ]; then
 else
   installing
   brew install --cask claude
+  ok
 fi
 
 # 12. Wrangler (Cloudflare)
@@ -351,6 +383,7 @@ if command -v wrangler &>/dev/null; then
 else
   installing
   pnpm add -g wrangler
+  ok
 fi
 
 # 13. Playwright
@@ -360,6 +393,7 @@ if npx playwright --version &>/dev/null 2>&1; then
 else
   installing
   npx playwright install chromium
+  ok
 fi
 
 echo ""
