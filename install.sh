@@ -250,6 +250,9 @@ else
   ok
 fi
 
+# Ensure PostgreSQL binaries are on PATH (keg-only formula)
+export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+
 check "pgvector extension"
 if brew list pgvector &>/dev/null; then
   skip
@@ -268,7 +271,7 @@ else
   brew services start postgresql@16
 
   PG_READY=false
-  for i in 1 2 3 4 5; do
+  for i in $(seq 1 15); do
     if pg_isready -q 2>/dev/null; then
       PG_READY=true
       break
@@ -277,7 +280,7 @@ else
   done
 
   if [ "$PG_READY" = false ]; then
-    fail "PostgreSQL failed to start after 10 seconds. Check: brew services list"
+    fail "PostgreSQL failed to start after 30 seconds. Check: brew services list"
     exit 1
   fi
   ok

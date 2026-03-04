@@ -77,12 +77,16 @@ A personal AI agent framework built on top of Claude Code CLI. Murph runs on a M
 The install script handles all dependencies automatically:
 
 ```bash
-git clone <repo-url> && cd murph
-chmod +x install.sh
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/owenmecham/ai-agent-setup-script/main/install.sh -o /tmp/murph-install.sh && bash /tmp/murph-install.sh
 ```
 
-This installs Homebrew, Node.js, pnpm, PostgreSQL + pgvector, Ollama, Claude Code CLI, Wrangler, and Playwright. It then runs `pnpm install` and applies database migrations.
+This installs Xcode CLI tools, Homebrew, Node.js, pnpm, PostgreSQL + pgvector, Ollama, Claude Code CLI, Claude Desktop, Wrangler, and Playwright. It then runs `pnpm install`, builds all packages, and applies database migrations.
+
+To update an existing install (code only, no tool re-checks):
+
+```bash
+~/murph/install.sh --update
+```
 
 ## Manual Setup
 
