@@ -1,55 +1,85 @@
-import { BlueBubblesClient, type BlueBubblesConfig } from './bluebubbles-client.js';
-import { WebhookServer } from './webhook-server.js';
-import { type MurphMessage } from './adapter.js';
+import { ChatDb } from './chat-db.js';
+import { adaptChatDbRow, type MurphMessage } from './adapter.js';
+import * as applescriptSender from './applescript-sender.js';
 import pino from 'pino';
 
 const logger = pino({ name: 'channel-imessage' });
 
 export interface IMessageChannelConfig {
-  blueBubblesUrl: string;
-  blueBubblesPassword: string;
-  webhookPort: number;
+  chatDbPath: string;
+  pollIntervalMs: number;
 }
 
 type MessageHandler = (message: MurphMessage) => Promise<void>;
 
 export class IMessageChannel {
   readonly name = 'imessage';
-  private client: BlueBubblesClient;
-  private webhook: WebhookServer;
+  private chatDb: ChatDb;
+  private config: IMessageChannelConfig;
+  private lastRowId = 0;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   private messageHandler?: MessageHandler;
 
   constructor(config: IMessageChannelConfig) {
-    this.client = new BlueBubblesClient({
-      url: config.blueBubblesUrl,
-      password: config.blueBubblesPassword,
-    });
-    this.webhook = new WebhookServer(config.webhookPort);
+    this.config = config;
+    this.chatDb = new ChatDb();
   }
 
   onMessage(handler: MessageHandler): void {
     this.messageHandler = handler;
-    this.webhook.onMessage(handler);
   }
 
   async start(): Promise<void> {
-    await this.webhook.start();
-    logger.info('iMessage channel started');
+    this.chatDb.open(this.config.chatDbPath);
+    this.lastRowId = this.chatDb.getMaxRowId();
+    logger.info({ lastRowId: this.lastRowId, dbPath: this.config.chatDbPath }, 'iMessage channel started');
+
+    this.pollTimer = setInterval(() => {
+      this.poll().catch((err) => {
+        logger.error({ err }, 'Error during iMessage poll');
+      });
+    }, this.config.pollIntervalMs);
   }
 
   async stop(): Promise<void> {
-    await this.webhook.stop();
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    this.chatDb.close();
     logger.info('iMessage channel stopped');
   }
 
   async sendReply(conversationId: string, content: string): Promise<void> {
     const chatGuid = conversationId.replace('imessage-', '');
-    await this.client.sendMessage(chatGuid, content);
+    await applescriptSender.sendMessage(chatGuid, content);
+    logger.info({ chatGuid }, 'Sent iMessage reply');
+  }
+
+  private async poll(): Promise<void> {
+    const rows = this.chatDb.fetchNewMessages(this.lastRowId);
+
+    for (const row of rows) {
+      this.lastRowId = row.rowid;
+
+      const message = adaptChatDbRow(row);
+      if (!message) continue;
+
+      logger.info({ sender: message.sender, rowid: row.rowid }, 'Received iMessage');
+
+      if (this.messageHandler) {
+        try {
+          await this.messageHandler(message);
+        } catch (err) {
+          logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
+        }
+      }
+    }
   }
 }
 
-export { BlueBubblesClient } from './bluebubbles-client.js';
-export type { BlueBubblesConfig } from './bluebubbles-client.js';
-export { WebhookServer } from './webhook-server.js';
-export { adaptBlueBubblesMessage } from './adapter.js';
+export { adaptChatDbRow } from './adapter.js';
 export type { MurphMessage } from './adapter.js';
+export { ChatDb } from './chat-db.js';
+export { extractText } from './body-parser.js';
+export { sendMessage } from './applescript-sender.js';

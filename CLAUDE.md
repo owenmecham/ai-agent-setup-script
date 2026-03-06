@@ -19,7 +19,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - `@murph/knowledge` — Second brain: Obsidian vault indexer, PDF/web ingestion, chunking + embedding
 - `@murph/security` — AES-256-GCM secret store, sandboxed code execution, bcrypt+JWT auth
 - `@murph/channel-telegram` — grammY Telegram bot with user allowlist
-- `@murph/channel-imessage` — BlueBubbles REST + webhook integration
+- `@murph/channel-imessage` — Direct iMessage database poller + AppleScript sender
 - `@murph/mcp-client` — Multi-server MCP client (stdio + HTTP)
 - `@murph/integration-bop` — BOP Framework hive mind (WebSocket provider + consumer)
 - `@murph/scheduler` — croner-based cron engine with natural language parsing

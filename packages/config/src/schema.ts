@@ -40,9 +40,8 @@ export const MurphConfigSchema = z.object({
   channels: z.object({
     imessage: z.object({
       enabled: z.boolean().default(false),
-      bluebubbles_url: z.string().default('http://localhost:1234'),
-      bluebubbles_password: z.string().default(''),
-      webhook_port: z.number().default(3142),
+      poll_interval_ms: z.number().default(1000),
+      chat_db_path: z.string().default('~/Library/Messages/chat.db'),
     }).default({}),
     telegram: z.object({
       enabled: z.boolean().default(false),

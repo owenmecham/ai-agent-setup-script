@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { ChatDbRow } from './chat-db.js';
+import { extractText } from './body-parser.js';
 
 export interface MurphMessage {
   id: string;
@@ -10,33 +12,69 @@ export interface MurphMessage {
   metadata?: Record<string, unknown>;
 }
 
-export function adaptBlueBubblesMessage(webhook: {
-  type: string;
-  data: {
-    guid: string;
-    chatGuid: string;
-    handle?: { address: string };
-    text: string;
-    dateCreated: number;
-    isFromMe: boolean;
-    attachments?: unknown[];
-  };
-}): MurphMessage | null {
-  if (webhook.type !== 'new-message' || webhook.data.isFromMe) {
+export interface AttachmentInfo {
+  path: string;
+  mimeType: string;
+  name: string;
+}
+
+/**
+ * Converts a raw SQLite row from chat.db into a MurphMessage.
+ * Returns null for rows that should be filtered out (tapbacks, empty messages, etc).
+ */
+export function adaptChatDbRow(row: ChatDbRow): MurphMessage | null {
+  // Filter tapback reactions (associated_message_type != 0)
+  if (row.associated_message_type !== 0) {
+    return null;
+  }
+
+  // Filter messages with no sender or no chat
+  if (!row.sender || !row.chat_guid) {
+    return null;
+  }
+
+  const content = extractText(row.attributedBody, row.text);
+  const attachments = parseAttachments(row);
+
+  // Filter messages with no content and no attachments
+  if (!content && attachments.length === 0) {
     return null;
   }
 
   return {
     id: randomUUID(),
-    conversationId: `imessage-${webhook.data.chatGuid}`,
+    conversationId: `imessage-${row.chat_guid}`,
     channel: 'imessage',
-    sender: webhook.data.handle?.address ?? 'unknown',
-    content: webhook.data.text ?? '',
-    timestamp: new Date(webhook.data.dateCreated),
+    sender: row.sender,
+    content,
+    timestamp: new Date(),
     metadata: {
-      blueBubblesGuid: webhook.data.guid,
-      chatGuid: webhook.data.chatGuid,
-      hasAttachments: (webhook.data.attachments?.length ?? 0) > 0,
+      chatGuid: row.chat_guid,
+      hasAttachments: row.cache_has_attachments === 1,
+      attachments,
     },
   };
+}
+
+function parseAttachments(row: ChatDbRow): AttachmentInfo[] {
+  if (!row.attachment_paths) {
+    return [];
+  }
+
+  const paths = row.attachment_paths.split('||');
+  const mimes = row.attachment_mimes?.split('||') ?? [];
+  const names = row.attachment_names?.split('||') ?? [];
+
+  const result: AttachmentInfo[] = [];
+  for (let i = 0; i < paths.length; i++) {
+    if (paths[i]) {
+      result.push({
+        path: paths[i],
+        mimeType: mimes[i] ?? 'application/octet-stream',
+        name: names[i] ?? '',
+      });
+    }
+  }
+
+  return result;
 }

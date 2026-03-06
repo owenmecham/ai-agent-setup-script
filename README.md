@@ -4,7 +4,7 @@ A personal AI agent framework built on top of Claude Code CLI. Murph runs on a M
 
 ## Features
 
-- **Multi-channel messaging** — Talk to Murph through iMessage (via BlueBubbles), Telegram, or a local web dashboard
+- **Multi-channel messaging** — Talk to Murph through iMessage, Telegram, or a local web dashboard
 - **3-tier memory** — Short-term buffer, PostgreSQL long-term storage, and pgvector semantic search
 - **Knowledge base** — Ingest and search your Obsidian vault, PDFs, web pages, Granola transcripts, and Plaud voice notes
 - **Approval gates** — Every action goes through configurable approval levels (`require`, `notify`, or `auto`)
@@ -20,7 +20,7 @@ A personal AI agent framework built on top of Claude Code CLI. Murph runs on a M
 ```
 ┌─────────────┐  ┌──────────────┐  ┌───────────────┐
 │  Telegram    │  │  iMessage    │  │  Dashboard    │
-│  (grammY)    │  │ (BlueBubbles)│  │  (Next.js)    │
+│  (grammY)    │  │ (chat.db)    │  │  (Next.js)    │
 └──────┬───────┘  └──────┬───────┘  └──────┬────────┘
        │                 │                 │
        └────────────┬────┴─────────────────┘
@@ -50,7 +50,7 @@ A personal AI agent framework built on top of Claude Code CLI. Murph runs on a M
 | `@murph/knowledge` | Obsidian vault indexer, PDF/web ingestion, chunking + embedding |
 | `@murph/security` | AES-256-GCM secret store, sandboxed code execution, bcrypt+JWT auth |
 | `@murph/channel-telegram` | Telegram bot with user allowlist |
-| `@murph/channel-imessage` | BlueBubbles REST + webhook integration |
+| `@murph/channel-imessage` | Direct iMessage database poller + AppleScript sender |
 | `@murph/mcp-client` | Multi-server MCP client (stdio + HTTP) |
 | `@murph/scheduler` | Cron engine with natural language parsing |
 | `@murph/creator` | Dynamic software creation + Cloudflare Pages deployment |
@@ -141,7 +141,6 @@ Edit `murph.config.yaml` to enable channels and integrations. Set secrets:
 
 ```bash
 pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>
-pnpm murph secret set BLUEBUBBLES_PASSWORD <your-password>
 ```
 
 ### 9. Start
@@ -176,9 +175,8 @@ channels:
     allowed_user_ids: []
   imessage:
     enabled: false
-    bluebubbles_url: "http://localhost:1234"
-    bluebubbles_password: "${BLUEBUBBLES_PASSWORD}"
-    webhook_port: 3142
+    poll_interval_ms: 1000
+    chat_db_path: "~/Library/Messages/chat.db"
 ```
 
 Secret references (`${SECRET_NAME}`) are resolved at runtime from the encrypted secret store.
@@ -204,14 +202,15 @@ Wildcard patterns are supported (e.g., `bop.*`, `playwright.*`).
 3. Add your Telegram user ID to `allowed_user_ids` in config
 4. Set `channels.telegram.enabled: true`
 
-### iMessage (BlueBubbles)
+### iMessage
 
-1. Install [BlueBubbles](https://bluebubbles.app) on your Mac
-2. Enable the Private API in BlueBubbles settings
-3. Configure the REST API on port 1234
-4. Set the webhook URL to `http://localhost:3142/webhook`
-5. Store the password: `pnpm murph secret set BLUEBUBBLES_PASSWORD <password>`
-6. Set `channels.imessage.enabled: true`
+1. Grant Full Disk Access to your terminal app:
+   - System Settings → Privacy & Security → Full Disk Access → add Terminal.app (or iTerm2, Warp, etc.)
+   - Quit and reopen your terminal
+2. Verify access: `sqlite3 ~/Library/Messages/chat.db "SELECT COUNT(*) FROM message;"`
+3. Grant Accessibility access for AppleScript (for sending replies):
+   - System Settings → Privacy & Security → Accessibility → add your terminal app
+4. Set `channels.imessage.enabled: true` in `murph.config.yaml`
 
 ### Dashboard
 

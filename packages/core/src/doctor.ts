@@ -206,24 +206,30 @@ export async function runDoctor(): Promise<DoctorResult> {
       }
     }
 
-    if (config.channels.imessage.enabled && !process.env.BLUEBUBBLES_PASSWORD) {
-      try {
-        const { SecretStore } = await import('@murph/security');
-        const store = new SecretStore();
-        await store.init();
-        const secrets = await store.list();
-        if (!secrets.includes('BLUEBUBBLES_PASSWORD')) {
-          checks.push({
-            name: 'iMessage secret',
-            status: 'warn',
-            message: 'BLUEBUBBLES_PASSWORD not found (iMessage is enabled)',
-            fix: 'Run: pnpm murph secret set BLUEBUBBLES_PASSWORD <your-password>',
-          });
-        } else {
-          checks.push({ name: 'iMessage secret', status: 'pass', message: 'BLUEBUBBLES_PASSWORD set' });
-        }
-      } catch {
-        checks.push({ name: 'iMessage secret', status: 'warn', message: 'Could not check secrets store' });
+    if (config.channels.imessage.enabled) {
+      const chatDbPath = (config.channels.imessage.chat_db_path ?? '~/Library/Messages/chat.db')
+        .replace(/^~/, process.env.HOME ?? '');
+      const dbCheck = await spawnCheck('sqlite3', [chatDbPath, 'SELECT 1;']);
+      if (dbCheck.code === 0) {
+        checks.push({
+          name: 'iMessage database',
+          status: 'pass',
+          message: 'chat.db is readable (Full Disk Access active)',
+        });
+      } else if (dbCheck.stderr.includes('not permitted') || dbCheck.stderr.includes('EPERM') || dbCheck.stderr.includes('EACCES')) {
+        checks.push({
+          name: 'iMessage database',
+          status: 'fail',
+          message: 'chat.db is not readable (Full Disk Access required)',
+          fix: 'Grant Full Disk Access: System Settings → Privacy & Security → Full Disk Access → add Terminal.app (or your terminal), then restart terminal',
+        });
+      } else {
+        checks.push({
+          name: 'iMessage database',
+          status: 'fail',
+          message: `chat.db not found or not accessible: ${dbCheck.stderr.trim()}`,
+          fix: 'Ensure Messages.app has been opened at least once. Expected path: ~/Library/Messages/chat.db',
+        });
       }
     }
   } catch {

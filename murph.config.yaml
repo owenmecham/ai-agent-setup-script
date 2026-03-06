@@ -33,9 +33,8 @@ security:
 channels:
   imessage:
     enabled: false
-    bluebubbles_url: "http://localhost:1234"
-    bluebubbles_password: "${BLUEBUBBLES_PASSWORD}"
-    webhook_port: 3142
+    poll_interval_ms: 1000
+    chat_db_path: "~/Library/Messages/chat.db"
   telegram:
     enabled: false
     bot_token: "${TELEGRAM_BOT_TOKEN}"

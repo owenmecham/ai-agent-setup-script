@@ -35,7 +35,7 @@ export async function GET() {
       {
         name: 'imessage',
         enabled: config.channels.imessage.enabled,
-        description: 'BlueBubbles iMessage integration',
+        description: 'iMessage (direct database poller)',
         settings: {},
       },
     );

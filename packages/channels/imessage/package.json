@@ -10,10 +10,11 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "fastify": "^5.1.0",
+    "better-sqlite3": "^11.7.0",
     "pino": "^9.5.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "typescript": "^5.7.0",
     "@types/node": "^22.10.0"
   }
