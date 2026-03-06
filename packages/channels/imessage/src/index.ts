@@ -30,7 +30,22 @@ export class IMessageChannel {
   }
 
   async start(): Promise<void> {
-    this.chatDb.open(this.config.chatDbPath);
+    try {
+      this.chatDb.open(this.config.chatDbPath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('unable to open') || msg.includes('EPERM') || msg.includes('EACCES') || msg.includes('not permitted')) {
+        logger.fatal(
+          { dbPath: this.config.chatDbPath },
+          'Cannot open iMessage database — Full Disk Access is required.\n' +
+          '  Fix: System Settings → Privacy & Security → Full Disk Access → add your terminal app, then restart the terminal.\n' +
+          '  Verify: sqlite3 ~/Library/Messages/chat.db "SELECT 1;"\n' +
+          '  Run "pnpm murph doctor" for a full diagnostic.',
+        );
+      }
+      throw err;
+    }
+
     this.lastRowId = this.chatDb.getMaxRowId();
     logger.info({ lastRowId: this.lastRowId, dbPath: this.config.chatDbPath }, 'iMessage channel started');
 
