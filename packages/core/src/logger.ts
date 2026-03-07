@@ -1,4 +1,6 @@
 import pino from 'pino';
+import { mkdirSync, existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 let rootLogger: pino.Logger | null = null;
 
@@ -8,9 +10,14 @@ export function initLogger(level: string = 'info', file?: string): pino.Logger {
   ];
 
   if (file) {
+    const dest = file.replace('~', process.env.HOME ?? '');
+    const dir = dirname(dest);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     targets.push({
       target: 'pino/file',
-      options: { destination: file.replace('~', process.env.HOME ?? '') },
+      options: { destination: dest },
       level,
     });
   }
