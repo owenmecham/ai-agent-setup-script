@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ShortTermMemory } from './short-term.js';
 import { LongTermMemory } from './long-term.js';
@@ -124,6 +125,8 @@ export class MemoryManager {
     _actions: unknown[],
     _results: unknown[],
   ): Promise<void> {
+    const responseId = randomUUID();
+
     // Add to short-term buffer
     this.shortTerm.add({
       id: message.id,
@@ -136,7 +139,7 @@ export class MemoryManager {
 
     // Also add the assistant response
     this.shortTerm.add({
-      id: `${message.id}-response`,
+      id: responseId,
       conversationId: message.conversationId,
       sender: 'murph',
       content: response,
@@ -155,7 +158,7 @@ export class MemoryManager {
     });
 
     await this.longTerm.storeMessage({
-      id: `${message.id}-response`,
+      id: responseId,
       conversationId: message.conversationId,
       sender: 'murph',
       content: response,
