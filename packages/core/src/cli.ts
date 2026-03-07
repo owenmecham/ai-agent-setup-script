@@ -96,6 +96,7 @@ async function main() {
         agent.addChannel(new IMessageChannel({
           chatDbPath: config.channels.imessage.chat_db_path,
           pollIntervalMs: config.channels.imessage.poll_interval_ms,
+          logger: createLogger('channel-imessage'),
         }));
       }
 

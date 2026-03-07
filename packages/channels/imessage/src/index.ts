@@ -3,11 +3,17 @@ import { adaptChatDbRow, type MurphMessage } from './adapter.js';
 import * as applescriptSender from './applescript-sender.js';
 import pino from 'pino';
 
-const logger = pino({ name: 'channel-imessage' });
+export interface IMessageLogger {
+  info(obj: Record<string, unknown>, msg: string): void;
+  warn(obj: Record<string, unknown>, msg: string): void;
+  error(obj: Record<string, unknown>, msg: string): void;
+  debug(obj: Record<string, unknown>, msg: string): void;
+}
 
 export interface IMessageChannelConfig {
   chatDbPath: string;
   pollIntervalMs: number;
+  logger?: IMessageLogger;
 }
 
 type MessageHandler = (message: MurphMessage) => Promise<void>;
@@ -19,9 +25,11 @@ export class IMessageChannel {
   private lastRowId = 0;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private messageHandler?: MessageHandler;
+  private logger: IMessageLogger;
 
   constructor(config: IMessageChannelConfig) {
     this.config = config;
+    this.logger = config.logger ?? pino({ name: 'channel-imessage' });
     this.chatDb = new ChatDb();
   }
 
@@ -35,7 +43,7 @@ export class IMessageChannel {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('unable to open') || msg.includes('EPERM') || msg.includes('EACCES') || msg.includes('not permitted')) {
-        logger.fatal(
+        this.logger.error(
           { dbPath: this.config.chatDbPath },
           'Cannot open iMessage database — Full Disk Access is required.\n' +
           '  Fix: System Settings → Privacy & Security → Full Disk Access → add your terminal app, then restart the terminal.\n' +
@@ -47,11 +55,11 @@ export class IMessageChannel {
     }
 
     this.lastRowId = this.chatDb.getMaxRowId();
-    logger.info({ lastRowId: this.lastRowId, dbPath: this.config.chatDbPath }, 'iMessage channel started');
+    this.logger.info({ lastRowId: this.lastRowId, dbPath: this.config.chatDbPath }, 'iMessage channel started');
 
     this.pollTimer = setInterval(() => {
       this.poll().catch((err) => {
-        logger.error({ err }, 'Error during iMessage poll');
+        this.logger.error({ err }, 'Error during iMessage poll');
       });
     }, this.config.pollIntervalMs);
   }
@@ -62,13 +70,13 @@ export class IMessageChannel {
       this.pollTimer = null;
     }
     this.chatDb.close();
-    logger.info('iMessage channel stopped');
+    this.logger.info({}, 'iMessage channel stopped');
   }
 
   async sendReply(conversationId: string, content: string): Promise<void> {
     const chatGuid = conversationId.replace('imessage-', '');
     await applescriptSender.sendMessage(chatGuid, content);
-    logger.info({ chatGuid }, 'Sent iMessage reply');
+    this.logger.info({ chatGuid }, 'Sent iMessage reply');
   }
 
   private async poll(): Promise<void> {
@@ -78,15 +86,28 @@ export class IMessageChannel {
       this.lastRowId = row.rowid;
 
       const message = adaptChatDbRow(row);
-      if (!message) continue;
+      if (!message) {
+        this.logger.warn(
+          {
+            rowid: row.rowid,
+            sender: row.sender ?? null,
+            chatGuid: row.chat_guid ?? null,
+            associatedMessageType: row.associated_message_type,
+            hasText: !!row.text,
+            hasAttributedBody: !!row.attributedBody,
+          },
+          'Filtered iMessage row',
+        );
+        continue;
+      }
 
-      logger.info({ sender: message.sender, rowid: row.rowid }, 'Received iMessage');
+      this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Received iMessage');
 
       if (this.messageHandler) {
         try {
           await this.messageHandler(message);
         } catch (err) {
-          logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
+          this.logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
         }
       }
     }
