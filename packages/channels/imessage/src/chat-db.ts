@@ -35,7 +35,7 @@ export class ChatDb {
   fetchNewMessages(sinceRowId: number): ChatDbRow[] {
     this.ensureOpen();
     const stmt = this.db!.prepare(`
-      SELECT m.rowid, m.text, m.attributedBody,
+      SELECT m.ROWID AS rowid, m.text, m.attributedBody,
              m.cache_has_attachments, m.associated_message_type,
              m.is_from_me,
              h.id AS sender, c.guid AS chat_guid,
