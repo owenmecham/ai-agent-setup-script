@@ -49,7 +49,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 Fresh install on a new Mac:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/owenmecham/ai-agent-setup-script/main/install.sh -o /tmp/murph-install.sh && bash /tmp/murph-install.sh
+curl -fsSL "https://raw.githubusercontent.com/owenmecham/ai-agent-setup-script/main/install.sh?$(date +%s)" -o /tmp/murph-install.sh && bash /tmp/murph-install.sh
 ```
 
 Code-only update (skips tool checks, safe restart):
