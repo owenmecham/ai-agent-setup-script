@@ -285,6 +285,13 @@ fi
 
 # Ensure PostgreSQL binaries are on PATH (keg-only formula)
 export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+if ! grep -q 'postgresql@16/bin' "$HOME/.zshrc" 2>/dev/null; then
+  cat >> "$HOME/.zshrc" <<'ZSHRC'
+
+# PostgreSQL 16 (Homebrew keg-only)
+export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+ZSHRC
+fi
 
 check "pgvector extension"
 PG_CONFIG="/opt/homebrew/opt/postgresql@16/bin/pg_config"
