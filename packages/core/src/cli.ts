@@ -71,17 +71,18 @@ async function main() {
       // Additional setup would go here (memory, channels, etc.)
       await agent.start();
 
-      process.on('SIGINT', async () => {
-        await agent.stop();
-        await ipcServer.stop();
-        process.exit(0);
-      });
+      // Keep the process alive until explicitly stopped
+      const keepAlive = setInterval(() => {}, 1 << 30);
 
-      process.on('SIGTERM', async () => {
+      const shutdown = async () => {
+        clearInterval(keepAlive);
         await agent.stop();
         await ipcServer.stop();
         process.exit(0);
-      });
+      };
+
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
       break;
     }
 
