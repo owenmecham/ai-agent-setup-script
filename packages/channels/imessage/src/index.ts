@@ -88,6 +88,16 @@ export class IMessageChannel {
     try {
       this.pollCount++;
       const now = Date.now();
+
+      if (!Number.isFinite(this.lastRowId)) {
+        const recovered = this.chatDb.getMaxRowId();
+        this.logger.warn(
+          { corruptValue: this.lastRowId, recoveredTo: recovered },
+          'lastRowId was corrupt — resetting to current max',
+        );
+        this.lastRowId = recovered;
+      }
+
       const rows = this.chatDb.fetchNewMessages(this.lastRowId);
 
       // Heartbeat every 30 seconds so we know the poll loop is alive
@@ -108,10 +118,16 @@ export class IMessageChannel {
       }
 
       for (const row of rows) {
+        if (typeof row.rowid !== 'number') {
+          this.logger.warn(
+            { rowid: row.rowid, rowidType: typeof row.rowid, rowKeys: Object.keys(row) },
+            'Unexpected rowid type from chat.db',
+          );
+        }
         this.lastRowId = row.rowid;
 
         if (row.is_from_me) {
-          this.logger.debug({ rowid: row.rowid }, 'Skipped outgoing iMessage row');
+          this.logger.info({ rowid: row.rowid }, 'Skipped outgoing iMessage row');
           continue;
         }
 
