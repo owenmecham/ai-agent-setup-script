@@ -219,6 +219,21 @@ else
   ok
 fi
 
+# Ensure ~/.zshrc exists and has nvm init (macOS defaults to zsh)
+if [ -n "${NVM_DIR:-}" ] || [ -d "$HOME/.nvm" ]; then
+  NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  touch "$HOME/.zshrc"
+  if ! grep -q 'NVM_DIR' "$HOME/.zshrc" 2>/dev/null; then
+    cat >> "$HOME/.zshrc" <<'ZSHRC'
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+ZSHRC
+  fi
+fi
+
 # 6. pnpm
 check "pnpm"
 if command -v pnpm &>/dev/null; then
