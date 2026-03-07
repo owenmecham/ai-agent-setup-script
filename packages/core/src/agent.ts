@@ -159,9 +159,21 @@ export class Agent {
       };
 
       // 3. Initial call to Claude
-      let claudeResponse = await this.bridge.reason(agentContext, message.content);
+      let claudeResponse;
       const allSteps: AgentStep[] = [];
       const allResults: unknown[] = [];
+
+      try {
+        claudeResponse = await this.bridge.reason(agentContext, message.content);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logger.error({ err, conversationId: message.conversationId }, 'Claude bridge error during initial reasoning');
+        const userReply = 'Sorry, I ran into an error processing your request.';
+        if (channel) {
+          await channel.sendReply(message.conversationId, userReply);
+        }
+        return { response: userReply, steps: [] };
+      }
 
       // 4. Agentic loop — execute actions, feed results back
       for (let iteration = 0; iteration < MAX_ITERATIONS && claudeResponse.actions.length > 0; iteration++) {
@@ -230,12 +242,21 @@ export class Agent {
         allSteps.push(...iterationSteps);
 
         // Feed results back to Claude for follow-up reasoning
-        claudeResponse = await this.bridge.reasonWithResults(
-          agentContext,
-          message.content,
-          claudeResponse.response,
-          iterationSteps,
-        );
+        try {
+          claudeResponse = await this.bridge.reasonWithResults(
+            agentContext,
+            message.content,
+            claudeResponse.response,
+            iterationSteps,
+          );
+        } catch (err) {
+          logger.error({ err, conversationId: message.conversationId }, 'Claude bridge error during follow-up reasoning');
+          const userReply = 'Sorry, I ran into an error processing follow-up results.';
+          if (channel) {
+            await channel.sendReply(message.conversationId, userReply);
+          }
+          return { response: userReply, steps: allSteps };
+        }
       }
 
       // 5. Store in memory

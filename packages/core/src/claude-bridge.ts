@@ -83,9 +83,13 @@ export class ClaudeBridge {
   private buildPrompt(context: AgentContext, userMessage: string): string {
     const parts: string[] = [];
 
-    parts.push('You are Murph, a personal AI assistant. Respond helpfully and take actions when appropriate.');
+    parts.push('You are Murph, a personal AI assistant running as a **non-interactive subprocess**.');
+    parts.push('You have NO built-in tools — no WebFetch, no WebSearch, no Bash, no file tools.');
+    parts.push('Your ONLY way to interact with the outside world is by including entries in the "actions" array of your JSON response, using the Available Actions listed below.');
     parts.push('');
-    parts.push('When you need to interact with the outside world — browse the web, fetch data, automate a browser, or perform any external task — use the Available Actions listed below. Include actions in the "actions" array of your JSON response with the correct "name" and "parameters".');
+    parts.push('You MUST respond with valid JSON: {"response": "...", "actions": [...]}');
+    parts.push('Each action needs "name" (exact match from Available Actions) and "parameters" (object).');
+    parts.push('If no actions are needed, use an empty array.');
     parts.push('');
     parts.push('If you have an action that can accomplish what the user is asking, use it confidently. If no relevant action exists, explain what capability would be needed and suggest the user configure it.');
     parts.push('');
@@ -148,38 +152,32 @@ export class ClaudeBridge {
 
     if (context.availableTools.length > 0) {
       parts.push('## Available Actions');
-      parts.push('These are your tools for interacting with the outside world. Use them by including entries in the "actions" array of your JSON response with the correct "name" and "parameters".');
       parts.push('');
       for (const tool of context.availableTools) {
-        parts.push(`### ${tool.name}`);
-        parts.push(tool.description);
+        let paramSummary = '(none)';
         if (tool.parameterSchema) {
           const schema = tool.parameterSchema;
           const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
           const required = (schema.required as string[]) ?? [];
           if (properties && Object.keys(properties).length > 0) {
-            parts.push('Parameters:');
+            const paramParts: string[] = [];
             for (const [param, def] of Object.entries(properties)) {
               const isRequired = required.includes(param);
-              const typeStr = def.type ? ` (${def.type})` : '';
-              const reqStr = isRequired ? ' [required]' : ' [optional]';
-              const descStr = def.description ? ` — ${def.description}` : '';
-              parts.push(`  - ${param}${typeStr}${reqStr}${descStr}`);
+              const typeStr = def.type ? ` ${def.type}` : '';
+              paramParts.push(`${param}${typeStr}${isRequired ? ', req' : ''}`);
             }
+            paramSummary = paramParts.join('; ');
           }
         }
-        parts.push('');
+        parts.push(`- **${tool.name}**: ${tool.description}`);
+        parts.push(`  Params: ${paramSummary}`);
       }
+      parts.push('');
 
-      // Add Playwright usage hints when browser tools are detected
+      // Compact Playwright usage hint
       const hasPlaywright = context.availableTools.some((t) => t.name.includes('playwright') || t.name.includes('browser_'));
       if (hasPlaywright) {
-        parts.push('### Web Browsing Patterns');
-        parts.push('To browse the web with Playwright, use this multi-step pattern:');
-        parts.push('1. Navigate to a URL with browser_navigate');
-        parts.push('2. Take a snapshot of the page with browser_snapshot to see its content');
-        parts.push('3. Extract the information you need from the snapshot');
-        parts.push('4. If needed, interact with elements (click, fill) and snapshot again');
+        parts.push('**Browsing pattern**: browser_navigate → browser_snapshot → read content → interact if needed → snapshot again.');
         parts.push('');
       }
     }
