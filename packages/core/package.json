@@ -11,6 +11,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@murph/channel-imessage": "workspace:*",
     "@murph/config": "workspace:*",
     "@murph/memory": "workspace:*",
     "@murph/security": "workspace:*",

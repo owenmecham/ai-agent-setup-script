@@ -32,7 +32,7 @@ security:
 
 channels:
   imessage:
-    enabled: false
+    enabled: true
     poll_interval_ms: 1000
     chat_db_path: "~/Library/Messages/chat.db"
   telegram:
@@ -51,7 +51,11 @@ knowledge:
     plaud:
       enabled: false
 
-mcp_servers: []
+mcp_servers:
+  - name: "playwright"
+    transport: "stdio"
+    command: "npx"
+    args: ["@playwright/mcp@latest", "--headed"]
 
 integrations:
   bop:

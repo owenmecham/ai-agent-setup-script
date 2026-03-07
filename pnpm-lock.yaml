@@ -83,6 +83,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@murph/channel-imessage':
+        specifier: workspace:*
+        version: link:../channels/imessage
       '@murph/config':
         specifier: workspace:*
         version: link:../config

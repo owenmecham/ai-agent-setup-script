@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { loadConfig } from './config.js';
 import { initLogger, createLogger } from './logger.js';
 
@@ -68,14 +69,35 @@ async function main() {
       await ipcServer.start();
       ipcServer.setupEventForwarding();
 
-      // Additional setup would go here (memory, channels, etc.)
+      // Wire up channels
+      if (config.channels.imessage.enabled) {
+        const { IMessageChannel } = await import('@murph/channel-imessage');
+        agent.addChannel(new IMessageChannel({
+          chatDbPath: config.channels.imessage.chat_db_path,
+          pollIntervalMs: config.channels.imessage.poll_interval_ms,
+        }));
+      }
+
       await agent.start();
+
+      // Start dashboard in production mode
+      const dashboardProc: ChildProcess = spawn('pnpm', ['--filter=@murph/dashboard', 'start'], {
+        cwd: process.cwd(),
+        stdio: 'ignore',
+        detached: false,
+      });
+      dashboardProc.unref();
+      logger.info({ pid: dashboardProc.pid }, 'Dashboard started');
 
       // Keep the process alive until explicitly stopped
       const keepAlive = setInterval(() => {}, 1 << 30);
 
       const shutdown = async () => {
         clearInterval(keepAlive);
+        if (dashboardProc.pid && !dashboardProc.killed) {
+          dashboardProc.kill();
+          logger.info('Dashboard stopped');
+        }
         await agent.stop();
         await ipcServer.stop();
         process.exit(0);
