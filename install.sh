@@ -374,6 +374,7 @@ else
 fi
 
 # 10. Claude Code CLI
+echo "[DEBUG] Starting Claude Code CLI step" >&2
 check "Claude Code CLI"
 if command -v claude &>/dev/null; then
   skip
@@ -382,14 +383,20 @@ else
   npm install -g @anthropic-ai/claude-code
   ok
 fi
+echo "[DEBUG] Claude Code CLI step complete" >&2
 
 # Ensure npm global bin is on PATH (needed when nvm was just installed)
+echo "[DEBUG] About to run npm prefix -g" >&2
 NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin" || true
+echo "[DEBUG] NPM_GLOBAL_BIN=$NPM_GLOBAL_BIN" >&2
 if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
   export PATH="$NPM_GLOBAL_BIN:$PATH"
+  echo "[DEBUG] Added $NPM_GLOBAL_BIN to PATH" >&2
 fi
+echo "[DEBUG] PATH block complete" >&2
 
 # 11. Claude Desktop
+echo "[DEBUG] Starting Claude Desktop step" >&2
 check "Claude Desktop"
 if [ -d "/Applications/Claude.app" ]; then
   skip
@@ -398,8 +405,10 @@ else
   brew install --cask claude
   ok
 fi
+echo "[DEBUG] Claude Desktop step complete" >&2
 
 # 12. Wrangler (Cloudflare)
+echo "[DEBUG] Starting Wrangler step" >&2
 check "Wrangler CLI"
 if command -v wrangler &>/dev/null; then
   skip
