@@ -384,7 +384,7 @@ else
 fi
 
 # Ensure npm global bin is on PATH (needed when nvm was just installed)
-NPM_GLOBAL_BIN="$(npm bin -g 2>/dev/null)"
+NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin" || true
 if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
   export PATH="$NPM_GLOBAL_BIN:$PATH"
 fi
