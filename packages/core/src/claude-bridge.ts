@@ -46,7 +46,8 @@ export class ClaudeBridge {
     ], prompt);
 
     try {
-      const parsed = JSON.parse(result);
+      const cleaned = this.stripCodeFences(result);
+      const parsed = JSON.parse(cleaned);
       return {
         response: parsed.response ?? result,
         actions: parsed.actions ?? [],
@@ -120,6 +121,12 @@ export class ClaudeBridge {
     parts.push('Respond with JSON containing "response" (your text reply) and "actions" (array of actions to take, each with "name" and "parameters"). If no actions needed, use an empty array.');
 
     return parts.join('\n');
+  }
+
+  private stripCodeFences(text: string): string {
+    const trimmed = text.trim();
+    const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/);
+    return match ? match[1].trim() : trimmed;
   }
 
   private callClaude(args: string[], stdin: string): Promise<string> {
