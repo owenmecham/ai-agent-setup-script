@@ -74,6 +74,12 @@ if [ "$UPDATE_ONLY" = true ]; then
     echo "$PORT_PIDS" | xargs kill 2>/dev/null || true
     STOPPED=true
   fi
+  # Kill anything still holding port 3141 (dashboard)
+  DASH_PIDS="$(lsof -ti :3141 2>/dev/null || true)"
+  if [ -n "$DASH_PIDS" ]; then
+    echo "$DASH_PIDS" | xargs kill 2>/dev/null || true
+    STOPPED=true
+  fi
   # Clean up stale IPC socket
   rm -f "$HOME/.murph/agent.sock"
   if [ "$STOPPED" = true ]; then
@@ -95,9 +101,22 @@ if [ "$UPDATE_ONLY" = true ]; then
     exit 1
   fi
 
+  check "Starting Dashboard"
+  nohup pnpm --filter=@murph/dashboard start >> "$INSTALL_DIR/dashboard.log" 2>&1 &
+  sleep 3
+
+  # Quick health check for dashboard
+  if lsof -ti :3141 &>/dev/null; then
+    ok
+  else
+    fail "Dashboard failed to start. Check $INSTALL_DIR/dashboard.log"
+  fi
+
   echo ""
   echo -e "${GREEN}Update complete! Murph is running.${NC}"
   echo "Logs: $INSTALL_DIR/murph.log"
+  echo "Dashboard logs: $INSTALL_DIR/dashboard.log"
+  echo "Dashboard: http://localhost:3141"
   exit 0
 fi
 
@@ -600,6 +619,8 @@ echo "     pnpm murph doctor"
 echo ""
 echo "  6. Start Murph:"
 echo "     cd $INSTALL_DIR && pnpm murph start"
+echo "     pnpm --filter=@murph/dashboard start"
+echo "     Dashboard: http://localhost:3141"
 echo ""
 echo "  To update Murph later (code only):"
 echo "     $INSTALL_DIR/install.sh --update"
