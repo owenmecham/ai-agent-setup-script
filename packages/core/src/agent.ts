@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { MurphMessage, MurphConfig, Action, ChannelAdapter } from './types.js';
+import type { MurphMessage, MurphConfig, Action, ChannelAdapter, UserProfile } from './types.js';
 import { ClaudeBridge } from './claude-bridge.js';
 import { ActionRegistry } from './action-registry.js';
 import { ApprovalGate } from './approval-gate.js';
 import { AuditLogger } from './audit-logger.js';
 import { AgentAPI } from './agent-api.js';
 import { createLogger } from './logger.js';
+import { getUserProfile } from './profile-db.js';
 import type { ConfigManager, ConfigChangeEvent } from '@murph/config';
 
 const logger = createLogger('agent');
@@ -107,108 +108,131 @@ export class Agent {
     channel.onMessage(async (message) => { await this.handleMessage(message, channel); });
   }
 
-  async handleMessage(message: MurphMessage, channel?: ChannelAdapter): Promise<string> {
+  async handleMessage(message: MurphMessage, channel?: ChannelAdapter, options?: { model?: string }): Promise<string> {
     logger.info(
-      { conversationId: message.conversationId, channel: message.channel },
+      { conversationId: message.conversationId, channel: message.channel, model: options?.model },
       'Handling message',
     );
 
-    // 1. Get context from memory
-    const context = this.memory
-      ? await this.memory.getContext(
-          message.conversationId,
-          this.config.memory.max_context_tokens,
-        )
-      : {
-          recentMessages: [],
-          semanticMemories: [],
-          knowledgeChunks: [],
-          entities: [],
-        };
+    // Temporarily override bridge model if requested
+    const originalModel = options?.model ? this.bridge.getModel() : undefined;
+    if (options?.model) {
+      this.bridge.setModel(options.model);
+    }
 
-    // 2. Get available tools
-    const availableTools = this.registry.getToolDescriptions();
+    try {
+      // 1. Get context from memory
+      const context = this.memory
+        ? await this.memory.getContext(
+            message.conversationId,
+            this.config.memory.max_context_tokens,
+          )
+        : {
+            recentMessages: [],
+            semanticMemories: [],
+            knowledgeChunks: [],
+            entities: [],
+          };
 
-    // 3. Call Claude for reasoning
-    const claudeResponse = await this.bridge.reason(
-      {
-        conversationId: message.conversationId,
-        recentMessages: context.recentMessages,
-        semanticMemories: context.semanticMemories,
-        knowledgeChunks: context.knowledgeChunks,
-        entities: context.entities,
-        availableTools,
-      },
-      message.content,
-    );
+      // 2. Get available tools
+      const availableTools = this.registry.getToolDescriptions();
 
-    const results: unknown[] = [];
-
-    // 4. Execute actions
-    for (const actionDef of claudeResponse.actions) {
-      const action: Action = {
-        id: randomUUID(),
-        name: actionDef.name,
-        description: '',
-        parameters: actionDef.parameters,
-        approval: 'require',
-      };
-
-      // Check approval
-      const { approved, level } = await this.approvalGate.check(action);
-
-      await this.auditLogger.log({
-        action: action.name,
-        status: approved ? 'started' : 'denied',
-        channel: message.channel,
-        conversationId: message.conversationId,
-        userId: message.sender,
-        parameters: action.parameters,
-      });
-
-      if (!approved) {
-        results.push({ actionId: action.id, denied: true });
-        continue;
+      // 2b. Fetch user profile
+      let userProfile: UserProfile | undefined;
+      try {
+        const profile = await getUserProfile(this.config.database.url);
+        if (profile) userProfile = profile;
+      } catch {
+        // Profile fetch is non-critical
       }
 
-      // Execute
-      const result = await this.registry.execute(action);
-      results.push(result);
-
-      await this.auditLogger.log({
-        action: action.name,
-        status: result.success ? 'completed' : 'failed',
-        channel: message.channel,
-        conversationId: message.conversationId,
-        userId: message.sender,
-        parameters: action.parameters,
-        result: result.data,
-        error: result.error,
-      });
-    }
-
-    // 5. Store in memory
-    if (this.memory) {
-      await this.memory.store(
-        message,
-        claudeResponse.response,
-        claudeResponse.actions.map((a) => ({
-          id: randomUUID(),
-          name: a.name,
-          description: '',
-          parameters: a.parameters,
-          approval: 'auto' as const,
-        })),
-        results,
+      // 3. Call Claude for reasoning
+      const claudeResponse = await this.bridge.reason(
+        {
+          conversationId: message.conversationId,
+          recentMessages: context.recentMessages,
+          semanticMemories: context.semanticMemories,
+          knowledgeChunks: context.knowledgeChunks,
+          entities: context.entities,
+          availableTools,
+          userProfile,
+        },
+        message.content,
       );
-    }
 
-    // 6. Reply via channel
-    if (channel) {
-      await channel.sendReply(message.conversationId, claudeResponse.response);
-    }
+      const results: unknown[] = [];
 
-    return claudeResponse.response;
+      // 4. Execute actions
+      for (const actionDef of claudeResponse.actions) {
+        const action: Action = {
+          id: randomUUID(),
+          name: actionDef.name,
+          description: '',
+          parameters: actionDef.parameters,
+          approval: 'require',
+        };
+
+        // Check approval
+        const { approved, level } = await this.approvalGate.check(action);
+
+        await this.auditLogger.log({
+          action: action.name,
+          status: approved ? 'started' : 'denied',
+          channel: message.channel,
+          conversationId: message.conversationId,
+          userId: message.sender,
+          parameters: action.parameters,
+        });
+
+        if (!approved) {
+          results.push({ actionId: action.id, denied: true });
+          continue;
+        }
+
+        // Execute
+        const result = await this.registry.execute(action);
+        results.push(result);
+
+        await this.auditLogger.log({
+          action: action.name,
+          status: result.success ? 'completed' : 'failed',
+          channel: message.channel,
+          conversationId: message.conversationId,
+          userId: message.sender,
+          parameters: action.parameters,
+          result: result.data,
+          error: result.error,
+        });
+      }
+
+      // 5. Store in memory
+      if (this.memory) {
+        await this.memory.store(
+          message,
+          claudeResponse.response,
+          claudeResponse.actions.map((a) => ({
+            id: randomUUID(),
+            name: a.name,
+            description: '',
+            parameters: a.parameters,
+            approval: 'auto' as const,
+          })),
+          results,
+        );
+      }
+
+      // 6. Reply via channel
+      if (channel) {
+        await channel.sendReply(message.conversationId, claudeResponse.response);
+      }
+
+      return claudeResponse.response;
+    } finally {
+      // Restore original model after per-request override
+      if (originalModel !== undefined) {
+        this.bridge.setModel(originalModel);
+      }
+    }
   }
 
   async start(): Promise<void> {

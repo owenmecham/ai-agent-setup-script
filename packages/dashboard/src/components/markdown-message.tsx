@@ -24,14 +24,14 @@ const components: Components = {
     const isBlock = className?.includes('language-');
     if (isBlock) {
       return (
-        <code className="block bg-zinc-950 rounded-md p-3 my-2 text-sm overflow-x-auto font-mono">
+        <code className="block bg-zinc-950 rounded-md p-3 my-2 text-sm overflow-x-auto max-w-full font-mono whitespace-pre">
           {children}
         </code>
       );
     }
     return <code className="bg-zinc-700 px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>;
   },
-  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+  pre: ({ children }) => <pre className="my-2 max-w-full overflow-x-auto">{children}</pre>,
   table: ({ children }) => (
     <div className="overflow-x-auto my-2">
       <table className="min-w-full text-sm border-collapse">{children}</table>
@@ -48,7 +48,7 @@ const components: Components = {
 
 export function MarkdownMessage({ content }: { content: string }) {
   return (
-    <div className="text-sm text-zinc-200 prose-invert max-w-none">
+    <div className="text-sm text-zinc-200 prose-invert max-w-none break-words">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>

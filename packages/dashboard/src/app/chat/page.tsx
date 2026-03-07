@@ -65,18 +65,79 @@ interface Message {
   timestamp: Date;
 }
 
+const ONBOARDING_PROMPT = `The user just arrived for the first time and has no profile set up yet. Please introduce yourself as Murph — a personal AI assistant. Be warm and conversational. Ask them about themselves: their name, where they live, what they do for work, their hobbies, and any social media handles they'd like to share. When they provide information, use the "profile.update" action to save it. You can update incrementally as they share details — you don't need to wait for everything at once.`;
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [model, setModel] = useState('sonnet');
   const [quote, setQuote] = useState('');
+  const [onboarding, setOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const onboardingTriggered = useRef(false);
 
   useEffect(() => {
     setQuote(INTERSTELLAR_QUOTES[Math.floor(Math.random() * INTERSTELLAR_QUOTES.length)]);
   }, []);
+
+  // Check for onboarding on mount
+  useEffect(() => {
+    if (onboardingTriggered.current) return;
+    onboardingTriggered.current = true;
+
+    fetch('/api/profile')
+      .then((res) => res.json())
+      .then((data) => {
+        // Profile is empty if null or has no name set
+        if (!data || !data.name) {
+          setOnboarding(true);
+          triggerOnboarding();
+        }
+      })
+      .catch(() => {
+        // Can't check profile, skip onboarding
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const triggerOnboarding = async () => {
+    const onboardingConvId = crypto.randomUUID();
+    setConversationId(onboardingConvId);
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: ONBOARDING_PROMPT,
+          conversationId: onboardingConvId,
+          model,
+        }),
+      });
+
+      const data = await response.json();
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: data.response ?? 'Hi there! I\'m Murph, your personal AI assistant. What\'s your name?',
+        timestamp: new Date(),
+      };
+
+      setMessages([assistantMessage]);
+    } catch {
+      setMessages([{
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Hi there! I\'m Murph, your personal AI assistant. I\'d love to get to know you. What\'s your name?',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,7 +188,7 @@ export default function ChatPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input, conversationId: activeConversationId }),
+        body: JSON.stringify({ message: input, conversationId: activeConversationId, model }),
       });
 
       const data = await response.json();
@@ -178,10 +239,22 @@ export default function ChatPage() {
             </button>
             <h2 className="text-2xl font-bold">Chat with Murph</h2>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-400 font-medium">Model:</span>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="bg-zinc-900 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-1.5 hover:border-zinc-600 focus:outline-none focus:border-blue-500 transition-colors font-medium"
+            >
+              <option value="haiku">Haiku</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="opus">Opus</option>
+            </select>
+          </div>
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 bg-zinc-900 rounded-xl border border-zinc-800 p-4 overflow-y-auto mb-4">
+        <div className="flex-1 bg-gradient-to-b from-blue-950/40 via-zinc-900 to-indigo-950/30 rounded-xl border border-zinc-800 p-4 overflow-y-auto mb-4">
           {/* Welcome screen */}
           {messages.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center h-full gap-6">
@@ -211,10 +284,8 @@ export default function ChatPage() {
               ) : (
                 <div className="flex justify-start gap-3">
                   <MurphAvatar />
-                  <div className="max-w-[80%]">
-                    <div className="bg-zinc-800 px-4 py-2 rounded-lg">
-                      <MarkdownMessage content={msg.content} />
-                    </div>
+                  <div className="max-w-[80%] min-w-0">
+                    <MarkdownMessage content={msg.content} />
                     <p className="text-xs text-zinc-500 mt-1">
                       {msg.timestamp.toLocaleTimeString()}
                     </p>

@@ -204,18 +204,23 @@ export class IPCServer {
       }
 
       case 'chat.send': {
-        const { message, conversationId } = params as {
+        const { message, conversationId, model } = params as {
           message: string;
           conversationId?: string;
+          model?: string;
         };
-        const response = await this.agent.handleMessage({
-          id: crypto.randomUUID(),
-          conversationId: conversationId ?? crypto.randomUUID(),
-          channel: 'dashboard',
-          sender: 'dashboard-user',
-          content: message,
-          timestamp: new Date(),
-        });
+        const response = await this.agent.handleMessage(
+          {
+            id: crypto.randomUUID(),
+            conversationId: conversationId ?? crypto.randomUUID(),
+            channel: 'dashboard',
+            sender: 'dashboard-user',
+            content: message,
+            timestamp: new Date(),
+          },
+          undefined,
+          model ? { model } : undefined,
+        );
         return { response };
       }
 

@@ -30,6 +30,10 @@ export class ClaudeBridge {
     this.model = model;
   }
 
+  getModel(): string {
+    return this.model;
+  }
+
   setModel(model: string): void {
     this.model = model;
   }
@@ -72,6 +76,29 @@ export class ClaudeBridge {
 
     parts.push('You are Murph, a personal AI assistant. Respond helpfully and take actions when appropriate.');
     parts.push('');
+
+    if (context.userProfile) {
+      const p = context.userProfile;
+      const profileLines: string[] = [];
+      if (p.name) profileLines.push(`Name: ${p.name}`);
+      if (p.location) profileLines.push(`Location: ${p.location}`);
+      if (p.profession) profileLines.push(`Profession: ${p.profession}`);
+      if (p.hobbies && p.hobbies.length > 0) profileLines.push(`Hobbies: ${p.hobbies.join(', ')}`);
+      if (p.bio) profileLines.push(`Bio: ${p.bio}`);
+      const socials: string[] = [];
+      if (p.social_twitter) socials.push(`Twitter: ${p.social_twitter}`);
+      if (p.social_linkedin) socials.push(`LinkedIn: ${p.social_linkedin}`);
+      if (p.social_github) socials.push(`GitHub: ${p.social_github}`);
+      if (p.social_instagram) socials.push(`Instagram: ${p.social_instagram}`);
+      if (p.social_facebook) socials.push(`Facebook: ${p.social_facebook}`);
+      if (socials.length > 0) profileLines.push(`Social: ${socials.join(', ')}`);
+
+      if (profileLines.length > 0) {
+        parts.push('## User Profile');
+        parts.push(...profileLines);
+        parts.push('');
+      }
+    }
 
     if (context.recentMessages.length > 0) {
       parts.push('## Recent Conversation');

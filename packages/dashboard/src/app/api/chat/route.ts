@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
-  const { message, conversationId } = await request.json();
+  const { message, conversationId, model } = await request.json();
 
   if (!message) {
     return NextResponse.json({ error: 'message is required' }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
           params: {
             message,
             conversationId: conversationId ?? crypto.randomUUID(),
+            ...(model && { model }),
           },
         };
         socket.write(JSON.stringify(ipcRequest) + '\n');

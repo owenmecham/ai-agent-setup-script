@@ -1,10 +1,13 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import murphLogo from '../app/murph.jpg';
 
 const navItems = [
   { href: '/', label: 'Home', icon: '⌂' },
+  { href: '/profile', label: 'Profile', icon: '👤' },
   { href: '/chat', label: 'Chat', icon: '💬' },
   { href: '/knowledge', label: 'Knowledge', icon: '📚' },
   { href: '/memory', label: 'Memory', icon: '🧠' },
@@ -20,9 +23,14 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-      <div className="p-6 border-b border-zinc-800">
-        <h1 className="text-xl font-bold text-white">Murph</h1>
-        <p className="text-xs text-zinc-500 mt-1">AI Agent Dashboard</p>
+      <div className="p-4 border-b border-zinc-800">
+        <Image
+          src={murphLogo}
+          alt="Murph"
+          className="w-full h-auto rounded-lg"
+          priority
+        />
+        <p className="text-xs text-zinc-500 mt-2 text-center">AI Agent Dashboard</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">

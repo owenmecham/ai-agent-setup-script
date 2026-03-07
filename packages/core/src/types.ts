@@ -40,6 +40,19 @@ export interface ActionHandler {
   execute: (params: Record<string, unknown>) => Promise<ActionResult>;
 }
 
+export interface UserProfile {
+  name?: string;
+  location?: string;
+  profession?: string;
+  hobbies?: string[];
+  social_twitter?: string;
+  social_linkedin?: string;
+  social_github?: string;
+  social_instagram?: string;
+  social_facebook?: string;
+  bio?: string;
+}
+
 export interface AgentContext {
   conversationId: string;
   recentMessages: MurphMessage[];
@@ -47,6 +60,7 @@ export interface AgentContext {
   knowledgeChunks: KnowledgeChunk[];
   entities: Entity[];
   availableTools: ToolDescription[];
+  userProfile?: UserProfile;
 }
 
 export interface SemanticMemory {
