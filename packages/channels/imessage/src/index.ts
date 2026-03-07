@@ -26,6 +26,8 @@ export class IMessageChannel {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private messageHandler?: MessageHandler;
   private logger: IMessageLogger;
+  private lastHeartbeat = 0;
+  private pollCount = 0;
 
   constructor(config: IMessageChannelConfig) {
     this.config = config;
@@ -80,7 +82,19 @@ export class IMessageChannel {
   }
 
   private async poll(): Promise<void> {
+    this.pollCount++;
+    const now = Date.now();
     const rows = this.chatDb.fetchNewMessages(this.lastRowId);
+
+    // Heartbeat every 30 seconds so we know the poll loop is alive
+    if (now - this.lastHeartbeat >= 30_000) {
+      const dbMaxRowId = this.chatDb.getMaxRowId();
+      this.logger.info(
+        { pollCount: this.pollCount, lastRowId: this.lastRowId, dbMaxRowId, rowsFound: rows.length },
+        'iMessage poll heartbeat',
+      );
+      this.lastHeartbeat = now;
+    }
 
     for (const row of rows) {
       this.lastRowId = row.rowid;
@@ -101,11 +115,12 @@ export class IMessageChannel {
         continue;
       }
 
-      this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Received iMessage');
+      this.logger.info({ sender: message.sender, rowid: row.rowid, lastRowId: this.lastRowId }, 'Received iMessage');
 
       if (this.messageHandler) {
         try {
           await this.messageHandler(message);
+          this.logger.info({ rowid: row.rowid }, 'Finished handling iMessage');
         } catch (err) {
           this.logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
         }
