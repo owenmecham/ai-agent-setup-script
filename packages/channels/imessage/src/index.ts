@@ -14,6 +14,7 @@ export interface IMessageChannelConfig {
   chatDbPath: string;
   pollIntervalMs: number;
   logger?: IMessageLogger;
+  allowedSenders?: string[];
 }
 
 type MessageHandler = (message: MurphMessage) => Promise<void>;
@@ -29,11 +30,15 @@ export class IMessageChannel {
   private lastHeartbeat = 0;
   private pollCount = 0;
   private isPolling = false;
+  private allowedSenders: Set<string>;
 
   constructor(config: IMessageChannelConfig) {
     this.config = config;
     this.logger = config.logger ?? pino({ name: 'channel-imessage' });
     this.chatDb = new ChatDb();
+    this.allowedSenders = new Set(
+      (config.allowedSenders ?? []).map((s) => s.toLowerCase()),
+    );
   }
 
   onMessage(handler: MessageHandler): void {
@@ -144,6 +149,12 @@ export class IMessageChannel {
             },
             'Filtered iMessage row',
           );
+          continue;
+        }
+
+        // Enforce sender allowlist (empty = allow all)
+        if (this.allowedSenders.size > 0 && !this.allowedSenders.has(message.sender.toLowerCase())) {
+          this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Ignored iMessage from unlisted sender');
           continue;
         }
 

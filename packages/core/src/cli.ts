@@ -96,6 +96,7 @@ async function main() {
         agent.addChannel(new IMessageChannel({
           chatDbPath: config.channels.imessage.chat_db_path,
           pollIntervalMs: config.channels.imessage.poll_interval_ms,
+          allowedSenders: config.channels.imessage.allowed_senders,
           logger: createLogger('channel-imessage'),
         }));
       }
@@ -165,7 +166,9 @@ async function main() {
 
       // Wire up scheduler and register scheduler actions
       let scheduler: import('@murph/scheduler').Scheduler | null = null;
-      try {
+      if (!config.scheduler.enabled) {
+        logger.info('Scheduler disabled by config');
+      } else try {
         const { Scheduler } = await import('@murph/scheduler');
         const schedulerPool = getPool(config.database.url);
         scheduler = new Scheduler(schedulerPool);
@@ -233,18 +236,35 @@ async function main() {
           },
         });
 
+        // Helper: resolve a query string to a task ID (UUID passthrough or name search)
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const resolveTaskId = async (query: string): Promise<{ id: string } | { error: string; matches?: import('@murph/scheduler').ScheduledTask[] }> => {
+          if (UUID_RE.test(query)) return { id: query };
+          const matches = await scheduler!.findTasksByName(query);
+          if (matches.length === 0) return { error: `No task found matching "${query}"` };
+          if (matches.length === 1) return { id: matches[0].id };
+          return {
+            error: `Multiple tasks match "${query}". Please clarify which one.`,
+            matches: matches.map((t) => ({ id: t.id, name: t.name, cronExpression: t.cronExpression, action: t.action, enabled: t.enabled }) as any),
+          };
+        };
+
         agent.getRegistry().register({
           name: 'scheduler.delete',
-          description: 'Delete a scheduled task by ID',
+          description: 'Delete a scheduled task by name or ID. Pass a query string — if it\'s a UUID the task is deleted directly; otherwise a case-insensitive name search is performed. If multiple tasks match, the list is returned so you can ask the user to clarify.',
           parameterSchema: {
             type: 'object',
-            required: ['id'],
-            properties: { id: { type: 'string' } },
+            required: ['query'],
+            properties: { query: { type: 'string' } },
           },
           execute: async (params) => {
             try {
-              await scheduler!.deleteTask(params.id as string);
-              return { actionId: '', success: true, data: { deleted: true } };
+              const resolved = await resolveTaskId(params.query as string);
+              if ('error' in resolved) {
+                return { actionId: '', success: false, error: resolved.error, data: (resolved as any).matches };
+              }
+              await scheduler!.deleteTask(resolved.id);
+              return { actionId: '', success: true, data: { deleted: true, id: resolved.id } };
             } catch (err) {
               return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
             }
@@ -253,12 +273,12 @@ async function main() {
 
         agent.getRegistry().register({
           name: 'scheduler.update',
-          description: 'Update a scheduled task. Params: id (string, required), name (string), cronExpression (string), action (string), parameters (object), enabled (boolean)',
+          description: 'Update a scheduled task by name or ID. Pass a query string to identify the task, plus any fields to update: name (string), cronExpression (string), action (string), parameters (object), enabled (boolean). If multiple tasks match the query, the list is returned so you can ask the user to clarify.',
           parameterSchema: {
             type: 'object',
-            required: ['id'],
+            required: ['query'],
             properties: {
-              id: { type: 'string' },
+              query: { type: 'string' },
               name: { type: 'string' },
               cronExpression: { type: 'string' },
               action: { type: 'string' },
@@ -268,9 +288,13 @@ async function main() {
           },
           execute: async (params) => {
             try {
-              const { id, ...updates } = params;
-              await scheduler!.updateTask(id as string, updates);
-              return { actionId: '', success: true, data: { updated: true } };
+              const { query, ...updates } = params;
+              const resolved = await resolveTaskId(query as string);
+              if ('error' in resolved) {
+                return { actionId: '', success: false, error: resolved.error, data: (resolved as any).matches };
+              }
+              await scheduler!.updateTask(resolved.id, updates);
+              return { actionId: '', success: true, data: { updated: true, id: resolved.id } };
             } catch (err) {
               return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
             }

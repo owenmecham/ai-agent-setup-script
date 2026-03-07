@@ -120,6 +120,14 @@ export class Scheduler {
     return result.rows.map(this.rowToTask);
   }
 
+  async findTasksByName(query: string): Promise<ScheduledTask[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM scheduled_tasks WHERE name ILIKE $1 ORDER BY created_at DESC`,
+      [`%${query}%`],
+    );
+    return result.rows.map(this.rowToTask);
+  }
+
   private scheduleJob(task: ScheduledTask): void {
     try {
       const job = new Cron(task.cronExpression, async () => {

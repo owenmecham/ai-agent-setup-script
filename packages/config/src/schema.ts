@@ -42,6 +42,7 @@ export const MurphConfigSchema = z.object({
       enabled: z.boolean().default(false),
       poll_interval_ms: z.number().default(1000),
       chat_db_path: z.string().default('~/Library/Messages/chat.db'),
+      allowed_senders: z.array(z.string()).default([]),
     }).default({}),
     telegram: z.object({
       enabled: z.boolean().default(false),
@@ -81,7 +82,13 @@ export const MurphConfigSchema = z.object({
     project_prefix: z.string().default('murph-gen'),
   }).default({}),
   scheduler: z.object({
-    enabled: z.boolean().default(false),
+    enabled: z.boolean().default(true),
+  }).default({}),
+  acknowledgment: z.object({
+    enabled: z.boolean().default(true),
+    style: z.enum(['pool', 'static', 'none']).default('pool'),
+    static_message: z.string().default('Received, thinking...'),
+    excluded_channels: z.array(z.string()).default(['dashboard']),
   }).default({}),
   memory: z.object({
     short_term_buffer_size: z.number().default(50),

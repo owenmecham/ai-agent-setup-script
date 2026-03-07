@@ -11,6 +11,15 @@ import type { ConfigManager, ConfigChangeEvent } from '@murph/config';
 
 const logger = createLogger('agent');
 
+const ACK_POOL = [
+  'Got it, working on this...',
+  'On it!',
+  'Let me think about that...',
+  'Processing your request...',
+  'Working on it...',
+  'Give me a moment...',
+];
+
 export interface MemoryInterface {
   getContext(conversationId: string, maxTokens: number): Promise<{
     recentMessages: MurphMessage[];
@@ -115,6 +124,24 @@ export class Agent {
       { conversationId: message.conversationId, channel: message.channel, model: options?.model },
       'Handling message',
     );
+
+    // Send immediate acknowledgment (unless excluded or disabled)
+    const ackConfig = this.config.acknowledgment;
+    if (
+      ackConfig.enabled &&
+      ackConfig.style !== 'none' &&
+      channel &&
+      !ackConfig.excluded_channels.includes(channel.name)
+    ) {
+      const ackMsg = ackConfig.style === 'static'
+        ? ackConfig.static_message
+        : ACK_POOL[Math.floor(Math.random() * ACK_POOL.length)];
+      try {
+        await channel.sendReply(message.conversationId, ackMsg);
+      } catch (err) {
+        logger.warn({ err }, 'Failed to send acknowledgment');
+      }
+    }
 
     // Temporarily override bridge model if requested
     const originalModel = options?.model ? this.bridge.getModel() : undefined;

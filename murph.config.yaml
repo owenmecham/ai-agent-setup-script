@@ -25,6 +25,9 @@ security:
     cloudflare.deploy: require
     creator.*: require
     scheduler.create: notify
+    scheduler.list: auto
+    scheduler.delete: auto
+    scheduler.update: auto
     hubspot.*: notify
     gohighlevel.*: notify
     profile.update: auto
@@ -36,6 +39,7 @@ channels:
     enabled: true
     poll_interval_ms: 1000
     chat_db_path: "~/Library/Messages/chat.db"
+    allowed_senders: []  # phone numbers or emails; empty = allow all
   telegram:
     enabled: false
     bot_token: "${TELEGRAM_BOT_TOKEN}"
@@ -80,7 +84,14 @@ creator:
   project_prefix: "murph-gen"
 
 scheduler:
-  enabled: false
+  enabled: true
+
+acknowledgment:
+  enabled: true
+  style: pool            # 'pool' | 'static' | 'none'
+  static_message: "Received, thinking..."
+  excluded_channels:
+    - dashboard
 
 memory:
   short_term_buffer_size: 50
