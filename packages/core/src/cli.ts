@@ -146,9 +146,24 @@ async function main() {
       // Start dashboard in production mode
       const dashboardProc: ChildProcess = spawn('pnpm', ['--filter=@murph/dashboard', 'start'], {
         cwd: process.cwd(),
-        stdio: 'ignore',
+        stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
       });
+
+      dashboardProc.stderr?.on('data', (data: Buffer) => {
+        logger.error({ output: data.toString().trim() }, 'Dashboard stderr');
+      });
+
+      dashboardProc.on('error', (err) => {
+        logger.error({ err }, 'Dashboard process error');
+      });
+
+      dashboardProc.on('exit', (code, signal) => {
+        if (code !== null && code !== 0) {
+          logger.error({ code, signal }, 'Dashboard exited unexpectedly');
+        }
+      });
+
       dashboardProc.unref();
       logger.info({ pid: dashboardProc.pid }, 'Dashboard started');
 

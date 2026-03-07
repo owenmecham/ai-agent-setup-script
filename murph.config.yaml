@@ -55,7 +55,7 @@ mcp_servers:
   - name: "playwright"
     transport: "stdio"
     command: "npx"
-    args: ["@playwright/mcp@latest", "--headed"]
+    args: ["@playwright/mcp@latest"]
 
 integrations:
   bop:
