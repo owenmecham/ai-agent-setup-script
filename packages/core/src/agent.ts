@@ -189,7 +189,7 @@ export class Agent {
         // Profile fetch is non-critical
       }
 
-      const agentContext = {
+      const agentContext: import('./types.js').AgentContext = {
         conversationId: message.conversationId,
         recentMessages: context.recentMessages,
         semanticMemories: context.semanticMemories,
@@ -198,6 +198,17 @@ export class Agent {
         availableTools,
         userProfile,
       };
+
+      // Wire outbound grant context if present
+      const grant = message.metadata?.outboundGrant as
+        | { grantId: string; outboundMessage: string; conversationId?: string }
+        | undefined;
+      if (grant) {
+        agentContext.outboundGrantContext = {
+          outboundMessage: grant.outboundMessage,
+          recipientSender: message.sender,
+        };
+      }
 
       // 3. Initial call to Claude
       let claudeResponse;

@@ -90,15 +90,85 @@ async function main() {
       await ipcServer.start();
       ipcServer.setupEventForwarding();
 
+      // Import pool early — needed by channel callbacks and action registrations
+      const { getPool } = await import('./profile-db.js');
+
       // Wire up channels
       if (config.channels.imessage.enabled) {
         const { IMessageChannel } = await import('@murph/channel-imessage');
+        const pool = getPool(config.database.url);
+
         agent.addChannel(new IMessageChannel({
           chatDbPath: config.channels.imessage.chat_db_path,
           pollIntervalMs: config.channels.imessage.poll_interval_ms,
           allowedSenders: config.channels.imessage.allowed_senders,
           logger: createLogger('channel-imessage'),
+          checkOutboundGrant: async (sender: string) => {
+            const result = await pool.query(
+              `SELECT id, outbound_message, conversation_id
+               FROM outbound_grants
+               WHERE recipient = $1 AND expires_at > NOW()
+               ORDER BY expires_at DESC
+               LIMIT 1`,
+              [sender.toLowerCase()],
+            );
+            if (result.rows.length === 0) return null;
+            const row = result.rows[0];
+            return {
+              grantId: row.id,
+              outboundMessage: row.outbound_message,
+              conversationId: row.conversation_id ?? undefined,
+            };
+          },
+          extendOutboundGrant: async (grantId: string) => {
+            await pool.query(
+              `UPDATE outbound_grants
+               SET expires_at = NOW() + INTERVAL '1 hour', updated_at = NOW()
+               WHERE id = $1`,
+              [grantId],
+            );
+          },
         }));
+
+        // Register imessage.send action
+        const { sendToRecipient } = await import('@murph/channel-imessage');
+        agent.getRegistry().register({
+          name: 'imessage.send',
+          description: 'Send an iMessage to a phone number or email address. Creates a temporary 1-hour reply window for the recipient. Params: recipient (phone/email), message (text)',
+          parameterSchema: {
+            type: 'object',
+            required: ['recipient', 'message'],
+            properties: {
+              recipient: { type: 'string', description: 'Phone number or email address' },
+              message: { type: 'string', description: 'Message text to send' },
+            },
+          },
+          execute: async (params) => {
+            try {
+              const recipient = params.recipient as string;
+              const message = params.message as string;
+              await sendToRecipient(recipient, message);
+              const grantResult = await pool.query(
+                `INSERT INTO outbound_grants (recipient, outbound_message, expires_at)
+                 VALUES ($1, $2, NOW() + INTERVAL '1 hour')
+                 RETURNING id, expires_at`,
+                [recipient.toLowerCase(), message],
+              );
+              const grant = grantResult.rows[0];
+              return {
+                actionId: '',
+                success: true,
+                data: { sent: true, grantId: grant.id, expiresAt: grant.expires_at },
+              };
+            } catch (err) {
+              return {
+                actionId: '',
+                success: false,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
+          },
+        });
       }
 
       // Wire up MCP servers
@@ -126,7 +196,6 @@ async function main() {
       }
 
       // Register profile.update action
-      const { getPool } = await import('./profile-db.js');
       agent.getRegistry().register({
         name: 'profile.update',
         description: 'Update user profile information. Parameters: name, location, profession, hobbies (array), bio, social_twitter, social_linkedin, social_github, social_instagram, social_facebook',
@@ -304,6 +373,21 @@ async function main() {
         logger.warn({ err }, 'Failed to start Scheduler — running without scheduler');
       }
 
+      // Hourly cleanup of expired outbound grants (> 24 hours old)
+      const grantCleanupPool = getPool(config.database.url);
+      const grantCleanupInterval = setInterval(async () => {
+        try {
+          const result = await grantCleanupPool.query(
+            `DELETE FROM outbound_grants WHERE expires_at < NOW() - INTERVAL '24 hours'`,
+          );
+          if (result.rowCount && result.rowCount > 0) {
+            logger.info({ deleted: result.rowCount }, 'Cleaned up expired outbound grants');
+          }
+        } catch (err) {
+          logger.error({ err }, 'Failed to clean up outbound grants');
+        }
+      }, 60 * 60 * 1000); // every hour
+
       await agent.start();
 
       // Start dashboard in standalone mode
@@ -338,6 +422,7 @@ async function main() {
 
       const shutdown = async () => {
         clearInterval(keepAlive);
+        clearInterval(grantCleanupInterval);
         if (dashboardProc.pid && !dashboardProc.killed) {
           dashboardProc.kill();
           logger.info('Dashboard stopped');

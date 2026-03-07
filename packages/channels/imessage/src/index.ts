@@ -10,11 +10,19 @@ export interface IMessageLogger {
   debug(obj: Record<string, unknown>, msg: string): void;
 }
 
+export interface OutboundGrantInfo {
+  grantId: string;
+  outboundMessage: string;
+  conversationId?: string;
+}
+
 export interface IMessageChannelConfig {
   chatDbPath: string;
   pollIntervalMs: number;
   logger?: IMessageLogger;
   allowedSenders?: string[];
+  checkOutboundGrant?: (sender: string) => Promise<OutboundGrantInfo | null>;
+  extendOutboundGrant?: (grantId: string) => Promise<void>;
 }
 
 type MessageHandler = (message: MurphMessage) => Promise<void>;
@@ -154,8 +162,27 @@ export class IMessageChannel {
 
         // Enforce sender allowlist (empty = allow all)
         if (this.allowedSenders.size > 0 && !this.allowedSenders.has(message.sender.toLowerCase())) {
-          this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Ignored iMessage from unlisted sender');
-          continue;
+          // Check for an active outbound grant
+          if (this.config.checkOutboundGrant) {
+            const grant = await this.config.checkOutboundGrant(message.sender);
+            if (grant) {
+              this.logger.info({ sender: message.sender, grantId: grant.grantId, rowid: row.rowid }, 'Sender allowed via outbound grant');
+              message.metadata = {
+                ...message.metadata,
+                outboundGrant: grant,
+              };
+              // Extend the rolling window
+              if (this.config.extendOutboundGrant) {
+                await this.config.extendOutboundGrant(grant.grantId);
+              }
+            } else {
+              this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Ignored iMessage from unlisted sender');
+              continue;
+            }
+          } else {
+            this.logger.info({ sender: message.sender, rowid: row.rowid }, 'Ignored iMessage from unlisted sender');
+            continue;
+          }
         }
 
         this.logger.info({ sender: message.sender, rowid: row.rowid, lastRowId: this.lastRowId }, 'Received iMessage');
@@ -179,4 +206,4 @@ export { adaptChatDbRow } from './adapter.js';
 export type { MurphMessage } from './adapter.js';
 export { ChatDb } from './chat-db.js';
 export { extractText } from './body-parser.js';
-export { sendMessage } from './applescript-sender.js';
+export { sendMessage, sendToRecipient } from './applescript-sender.js';

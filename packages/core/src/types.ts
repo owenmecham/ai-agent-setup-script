@@ -61,6 +61,10 @@ export interface AgentContext {
   entities: Entity[];
   availableTools: ToolDescription[];
   userProfile?: UserProfile;
+  outboundGrantContext?: {
+    outboundMessage: string;
+    recipientSender: string;
+  };
 }
 
 export interface SemanticMemory {
