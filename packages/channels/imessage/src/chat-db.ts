@@ -6,6 +6,7 @@ export interface ChatDbRow {
   attributedBody: Buffer | null;
   cache_has_attachments: number;
   associated_message_type: number;
+  is_from_me: number;
   sender: string | null;
   chat_guid: string | null;
   attachment_paths: string | null;
@@ -36,6 +37,7 @@ export class ChatDb {
     const stmt = this.db!.prepare(`
       SELECT m.rowid, m.text, m.attributedBody,
              m.cache_has_attachments, m.associated_message_type,
+             m.is_from_me,
              h.id AS sender, c.guid AS chat_guid,
              GROUP_CONCAT(a.filename, '||') AS attachment_paths,
              GROUP_CONCAT(a.mime_type, '||') AS attachment_mimes,
@@ -46,7 +48,7 @@ export class ChatDb {
       LEFT JOIN chat c ON cmj.chat_id = c.rowid
       LEFT JOIN message_attachment_join maj ON m.rowid = maj.message_id
       LEFT JOIN attachment a ON a.rowid = maj.attachment_id
-      WHERE m.rowid > ? AND m.is_from_me = 0
+      WHERE m.rowid > ?
       GROUP BY m.rowid
       ORDER BY m.rowid ASC
     `);

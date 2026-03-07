@@ -28,6 +28,7 @@ export class IMessageChannel {
   private logger: IMessageLogger;
   private lastHeartbeat = 0;
   private pollCount = 0;
+  private isPolling = false;
 
   constructor(config: IMessageChannelConfig) {
     this.config = config;
@@ -82,49 +83,67 @@ export class IMessageChannel {
   }
 
   private async poll(): Promise<void> {
-    this.pollCount++;
-    const now = Date.now();
-    const rows = this.chatDb.fetchNewMessages(this.lastRowId);
+    if (this.isPolling) return;
+    this.isPolling = true;
+    try {
+      this.pollCount++;
+      const now = Date.now();
+      const rows = this.chatDb.fetchNewMessages(this.lastRowId);
 
-    // Heartbeat every 30 seconds so we know the poll loop is alive
-    if (now - this.lastHeartbeat >= 30_000) {
-      const dbMaxRowId = this.chatDb.getMaxRowId();
-      this.logger.info(
-        { pollCount: this.pollCount, lastRowId: this.lastRowId, dbMaxRowId, rowsFound: rows.length },
-        'iMessage poll heartbeat',
-      );
-      this.lastHeartbeat = now;
-    }
-
-    for (const row of rows) {
-      this.lastRowId = row.rowid;
-
-      const message = adaptChatDbRow(row);
-      if (!message) {
-        this.logger.warn(
-          {
-            rowid: row.rowid,
-            sender: row.sender ?? null,
-            chatGuid: row.chat_guid ?? null,
-            associatedMessageType: row.associated_message_type,
-            hasText: !!row.text,
-            hasAttributedBody: !!row.attributedBody,
-          },
-          'Filtered iMessage row',
+      // Heartbeat every 30 seconds so we know the poll loop is alive
+      if (now - this.lastHeartbeat >= 30_000) {
+        const dbMaxRowId = this.chatDb.getMaxRowId();
+        const gap = dbMaxRowId - this.lastRowId;
+        this.logger.info(
+          { pollCount: this.pollCount, lastRowId: this.lastRowId, dbMaxRowId, rowsFound: rows.length, gap },
+          'iMessage poll heartbeat',
         );
-        continue;
+        if (gap > 0) {
+          this.logger.warn(
+            { gap, lastRowId: this.lastRowId, dbMaxRowId },
+            'iMessage poll has unprocessed rows in gap',
+          );
+        }
+        this.lastHeartbeat = now;
       }
 
-      this.logger.info({ sender: message.sender, rowid: row.rowid, lastRowId: this.lastRowId }, 'Received iMessage');
+      for (const row of rows) {
+        this.lastRowId = row.rowid;
 
-      if (this.messageHandler) {
-        try {
-          await this.messageHandler(message);
-          this.logger.info({ rowid: row.rowid }, 'Finished handling iMessage');
-        } catch (err) {
-          this.logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
+        if (row.is_from_me) {
+          this.logger.debug({ rowid: row.rowid }, 'Skipped outgoing iMessage row');
+          continue;
+        }
+
+        const message = adaptChatDbRow(row);
+        if (!message) {
+          this.logger.warn(
+            {
+              rowid: row.rowid,
+              sender: row.sender ?? null,
+              chatGuid: row.chat_guid ?? null,
+              associatedMessageType: row.associated_message_type,
+              hasText: !!row.text,
+              hasAttributedBody: !!row.attributedBody,
+            },
+            'Filtered iMessage row',
+          );
+          continue;
+        }
+
+        this.logger.info({ sender: message.sender, rowid: row.rowid, lastRowId: this.lastRowId }, 'Received iMessage');
+
+        if (this.messageHandler) {
+          try {
+            await this.messageHandler(message);
+            this.logger.info({ rowid: row.rowid }, 'Finished handling iMessage');
+          } catch (err) {
+            this.logger.error({ err, rowid: row.rowid }, 'Error handling iMessage');
+          }
         }
       }
+    } finally {
+      this.isPolling = false;
     }
   }
 }
