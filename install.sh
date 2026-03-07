@@ -383,6 +383,12 @@ else
   ok
 fi
 
+# Ensure npm global bin is on PATH (needed when nvm was just installed)
+NPM_GLOBAL_BIN="$(npm bin -g 2>/dev/null)"
+if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
+  export PATH="$NPM_GLOBAL_BIN:$PATH"
+fi
+
 # 11. Claude Desktop
 check "Claude Desktop"
 if [ -d "/Applications/Claude.app" ]; then
