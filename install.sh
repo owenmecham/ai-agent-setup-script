@@ -63,7 +63,20 @@ if [ "$UPDATE_ONLY" = true ]; then
   # Stop old process and restart
   echo ""
   check "Stopping Murph"
+  STOPPED=false
+  # Kill by process name
   if pkill -f "tsx packages/core/src/cli.ts" 2>/dev/null; then
+    STOPPED=true
+  fi
+  # Kill anything still holding port 3140
+  PORT_PIDS="$(lsof -ti :3140 2>/dev/null || true)"
+  if [ -n "$PORT_PIDS" ]; then
+    echo "$PORT_PIDS" | xargs kill 2>/dev/null || true
+    STOPPED=true
+  fi
+  # Clean up stale IPC socket
+  rm -f "$HOME/.murph/agent.sock"
+  if [ "$STOPPED" = true ]; then
     sleep 2
     ok
   else
