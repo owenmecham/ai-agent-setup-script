@@ -3,6 +3,7 @@ agent:
   model: "sonnet"
   max_budget_per_message_usd: 0.50
   timezone: "America/Denver"
+  web_search: true
 
 database:
   url: "postgresql://localhost:5432/murph"

@@ -44,7 +44,11 @@ export class Agent {
   constructor(config: MurphConfig, configManager?: ConfigManager) {
     this.config = config;
     this.configManager = configManager ?? null;
-    this.bridge = new ClaudeBridge(config.agent.model);
+    this.bridge = new ClaudeBridge({
+      model: config.agent.model,
+      timezone: config.agent.timezone,
+      webSearchEnabled: config.agent.web_search,
+    });
     this.registry = new ActionRegistry();
     this.approvalGate = new ApprovalGate(config);
     this.auditLogger = new AuditLogger();
@@ -66,6 +70,16 @@ export class Agent {
       if (path === 'agent.model') {
         this.bridge.setModel(current.agent.model);
         logger.info({ model: current.agent.model }, 'Model updated');
+      }
+
+      if (path === 'agent.timezone') {
+        this.bridge.setTimezone(current.agent.timezone);
+        logger.info({ timezone: current.agent.timezone }, 'Timezone updated');
+      }
+
+      if (path === 'agent.web_search') {
+        this.bridge.setWebSearch(current.agent.web_search);
+        logger.info({ webSearch: current.agent.web_search }, 'Web search updated');
       }
 
       if (path.startsWith('security.approval_defaults')) {

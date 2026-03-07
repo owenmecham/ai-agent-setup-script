@@ -8,6 +8,7 @@ export const MurphConfigSchema = z.object({
     model: z.string().default('sonnet'),
     max_budget_per_message_usd: z.number().default(0.50),
     timezone: z.string().default('America/Denver'),
+    web_search: z.boolean().default(true),
     api_port: z.number().default(3140),
   }),
   database: z.object({
