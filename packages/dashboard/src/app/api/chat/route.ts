@@ -52,20 +52,21 @@ export async function POST(request: NextRequest) {
 
       socket.on('error', () => {
         resolve(NextResponse.json(
-          { response: `Echo: ${message}`, note: 'Agent not running. Showing echo response.' },
+          { response: `Echo: ${message}`, steps: [], note: 'Agent not running. Showing echo response.' },
         ));
       });
 
       setTimeout(() => {
         socket.destroy();
         resolve(NextResponse.json(
-          { response: `Echo: ${message}`, note: 'Agent response timed out. Showing echo response.' },
+          { response: `Echo: ${message}`, steps: [], note: 'Agent response timed out. Showing echo response.' },
         ));
-      }, 30000);
+      }, 120000);
     });
   } catch {
     return NextResponse.json({
       response: `Echo: ${message}`,
+      steps: [],
       note: 'Agent not available. Showing echo response.',
     });
   }

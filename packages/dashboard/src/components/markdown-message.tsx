@@ -24,14 +24,14 @@ const components: Components = {
     const isBlock = className?.includes('language-');
     if (isBlock) {
       return (
-        <code className="block bg-zinc-950 rounded-md p-3 my-2 text-sm overflow-x-auto max-w-full font-mono whitespace-pre">
+        <code className="block bg-zinc-950 rounded-md p-3 my-2 text-sm max-w-full font-mono whitespace-pre-wrap break-words">
           {children}
         </code>
       );
     }
     return <code className="bg-zinc-700 px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>;
   },
-  pre: ({ children }) => <pre className="my-2 max-w-full overflow-x-auto">{children}</pre>,
+  pre: ({ children }) => <pre className="my-2 max-w-full">{children}</pre>,
   table: ({ children }) => (
     <div className="overflow-x-auto my-2">
       <table className="min-w-full text-sm border-collapse">{children}</table>

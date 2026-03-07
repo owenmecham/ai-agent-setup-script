@@ -209,7 +209,7 @@ export class IPCServer {
           conversationId?: string;
           model?: string;
         };
-        const response = await this.agent.handleMessage(
+        const result = await this.agent.handleMessage(
           {
             id: crypto.randomUUID(),
             conversationId: conversationId ?? crypto.randomUUID(),
@@ -221,7 +221,7 @@ export class IPCServer {
           undefined,
           model ? { model } : undefined,
         );
-        return { response };
+        return { response: result.response, steps: result.steps };
       }
 
       default:

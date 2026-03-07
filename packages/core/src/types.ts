@@ -118,3 +118,16 @@ export interface AuditEntry {
   result?: unknown;
   error?: string;
 }
+
+export interface AgentStep {
+  action: string;
+  parameters: Record<string, unknown>;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+export interface HandleMessageResult {
+  response: string;
+  steps: AgentStep[];
+}

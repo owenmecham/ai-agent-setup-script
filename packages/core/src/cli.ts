@@ -65,6 +65,27 @@ async function main() {
       const agent = new Agent(config, configManager);
       const ipcServer = new IPCServer(agent);
 
+      // Wire up memory
+      let memoryManager: { start(): Promise<void>; stop(): Promise<void> } | null = null;
+      try {
+        const { MemoryManager } = await import('@murph/memory');
+        memoryManager = new MemoryManager({
+          databaseUrl: config.database.url,
+          shortTermBufferSize: config.memory.short_term_buffer_size,
+          flushIntervalSeconds: config.memory.flush_interval_seconds,
+          semanticSearchLimit: config.memory.semantic_search_limit,
+          knowledgeSearchLimit: config.memory.knowledge_search_limit,
+          maxContextTokens: config.memory.max_context_tokens,
+          ollamaUrl: config.embedding.ollama_url,
+          embeddingModel: config.embedding.model,
+        });
+        await memoryManager.start();
+        agent.setMemory(memoryManager as any);
+        logger.info('MemoryManager started');
+      } catch (err) {
+        logger.warn({ err }, 'Failed to start MemoryManager — running without memory');
+      }
+
       // Start IPC server and set up event forwarding
       await ipcServer.start();
       ipcServer.setupEventForwarding();
@@ -179,6 +200,10 @@ async function main() {
         if (mcpManager) {
           await mcpManager.disconnectAll();
           logger.info('MCP servers disconnected');
+        }
+        if (memoryManager) {
+          await memoryManager.stop();
+          logger.info('MemoryManager stopped');
         }
         await agent.stop();
         await ipcServer.stop();

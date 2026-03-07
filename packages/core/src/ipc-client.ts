@@ -123,7 +123,7 @@ export class IPCClient extends EventEmitter {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`IPC call timed out: ${method}`));
-      }, 30_000);
+      }, 120_000);
 
       this.pending.set(id, {
         resolve: (value) => {
@@ -165,7 +165,7 @@ export class IPCClient extends EventEmitter {
     return this.call('config.update', { updates });
   }
 
-  async sendChat(message: string, conversationId?: string): Promise<{ response: string }> {
-    return this.call('chat.send', { message, conversationId }) as Promise<{ response: string }>;
+  async sendChat(message: string, conversationId?: string): Promise<{ response: string; steps?: Array<{ action: string; parameters: Record<string, unknown>; success: boolean; data?: unknown; error?: string }> }> {
+    return this.call('chat.send', { message, conversationId }) as Promise<{ response: string; steps?: Array<{ action: string; parameters: Record<string, unknown>; success: boolean; data?: unknown; error?: string }> }>;
   }
 }

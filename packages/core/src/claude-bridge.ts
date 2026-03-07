@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { AgentContext, ClaudeBridgeResponse } from './types.js';
+import type { AgentContext, AgentStep, ClaudeBridgeResponse } from './types.js';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('claude-bridge');
@@ -42,6 +42,34 @@ export class ClaudeBridge {
     const prompt = this.buildPrompt(context, userMessage);
 
     logger.info({ conversationId: context.conversationId }, 'Calling Claude CLI for reasoning');
+
+    const result = await this.callClaude([
+      '-p',
+      '--model', this.model,
+      '--output-format', 'json',
+    ], prompt);
+
+    try {
+      const cleaned = this.stripCodeFences(result);
+      const parsed = JSON.parse(cleaned);
+      return {
+        response: parsed.response ?? result,
+        actions: parsed.actions ?? [],
+      };
+    } catch {
+      return { response: result, actions: [] };
+    }
+  }
+
+  async reasonWithResults(
+    context: AgentContext,
+    userMessage: string,
+    previousResponse: string,
+    actionResults: AgentStep[],
+  ): Promise<ClaudeBridgeResponse> {
+    const prompt = this.buildFollowUpPrompt(context, userMessage, previousResponse, actionResults);
+
+    logger.info({ conversationId: context.conversationId }, 'Calling Claude CLI for follow-up reasoning');
 
     const result = await this.callClaude([
       '-p',
@@ -144,6 +172,40 @@ export class ClaudeBridge {
 
     parts.push('## User Message');
     parts.push(userMessage);
+    parts.push('');
+    parts.push('Respond with JSON containing "response" (your text reply) and "actions" (array of actions to take, each with "name" and "parameters"). If no actions needed, use an empty array.');
+
+    return parts.join('\n');
+  }
+
+  private buildFollowUpPrompt(
+    context: AgentContext,
+    userMessage: string,
+    previousResponse: string,
+    actionResults: AgentStep[],
+  ): string {
+    const base = this.buildPrompt(context, userMessage);
+    const parts: string[] = [base, ''];
+
+    parts.push('## Your Previous Response');
+    parts.push(previousResponse);
+    parts.push('');
+
+    parts.push('## Action Results');
+    for (const step of actionResults) {
+      parts.push(`### ${step.action} — ${step.success ? 'SUCCESS' : 'FAILED'}`);
+      if (step.error) {
+        parts.push(`Error: ${step.error}`);
+      }
+      if (step.data !== undefined) {
+        const dataStr = typeof step.data === 'string' ? step.data : JSON.stringify(step.data, null, 2);
+        const truncated = dataStr.length > 10_000 ? dataStr.slice(0, 10_000) + '\n... (truncated)' : dataStr;
+        parts.push(`Data:\n${truncated}`);
+      }
+      parts.push('');
+    }
+
+    parts.push('Based on the action results above, provide an updated response to the user. If you need to take further actions, include them in the "actions" array. If all tasks are complete, use an empty actions array.');
     parts.push('');
     parts.push('Respond with JSON containing "response" (your text reply) and "actions" (array of actions to take, each with "name" and "parameters"). If no actions needed, use an empty array.');
 

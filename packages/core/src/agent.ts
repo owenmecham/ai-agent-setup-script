@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { MurphMessage, MurphConfig, Action, ChannelAdapter, UserProfile } from './types.js';
+import type { MurphMessage, MurphConfig, Action, ChannelAdapter, UserProfile, AgentStep, HandleMessageResult } from './types.js';
 import { ClaudeBridge } from './claude-bridge.js';
 import { ActionRegistry } from './action-registry.js';
 import { ApprovalGate } from './approval-gate.js';
@@ -108,7 +108,9 @@ export class Agent {
     channel.onMessage(async (message) => { await this.handleMessage(message, channel); });
   }
 
-  async handleMessage(message: MurphMessage, channel?: ChannelAdapter, options?: { model?: string }): Promise<string> {
+  async handleMessage(message: MurphMessage, channel?: ChannelAdapter, options?: { model?: string }): Promise<HandleMessageResult> {
+    const MAX_ITERATIONS = 5;
+
     logger.info(
       { conversationId: message.conversationId, channel: message.channel, model: options?.model },
       'Handling message',
@@ -146,63 +148,94 @@ export class Agent {
         // Profile fetch is non-critical
       }
 
-      // 3. Call Claude for reasoning
-      const claudeResponse = await this.bridge.reason(
-        {
-          conversationId: message.conversationId,
-          recentMessages: context.recentMessages,
-          semanticMemories: context.semanticMemories,
-          knowledgeChunks: context.knowledgeChunks,
-          entities: context.entities,
-          availableTools,
-          userProfile,
-        },
-        message.content,
-      );
+      const agentContext = {
+        conversationId: message.conversationId,
+        recentMessages: context.recentMessages,
+        semanticMemories: context.semanticMemories,
+        knowledgeChunks: context.knowledgeChunks,
+        entities: context.entities,
+        availableTools,
+        userProfile,
+      };
 
-      const results: unknown[] = [];
+      // 3. Initial call to Claude
+      let claudeResponse = await this.bridge.reason(agentContext, message.content);
+      const allSteps: AgentStep[] = [];
+      const allResults: unknown[] = [];
 
-      // 4. Execute actions
-      for (const actionDef of claudeResponse.actions) {
-        const action: Action = {
-          id: randomUUID(),
-          name: actionDef.name,
-          description: '',
-          parameters: actionDef.parameters,
-          approval: 'require',
-        };
+      // 4. Agentic loop — execute actions, feed results back
+      for (let iteration = 0; iteration < MAX_ITERATIONS && claudeResponse.actions.length > 0; iteration++) {
+        logger.info({ iteration, actionCount: claudeResponse.actions.length }, 'Agentic loop iteration');
 
-        // Check approval
-        const { approved, level } = await this.approvalGate.check(action);
+        const iterationSteps: AgentStep[] = [];
 
-        await this.auditLogger.log({
-          action: action.name,
-          status: approved ? 'started' : 'denied',
-          channel: message.channel,
-          conversationId: message.conversationId,
-          userId: message.sender,
-          parameters: action.parameters,
-        });
+        for (const actionDef of claudeResponse.actions) {
+          const action: Action = {
+            id: randomUUID(),
+            name: actionDef.name,
+            description: '',
+            parameters: actionDef.parameters,
+            approval: 'require',
+          };
 
-        if (!approved) {
-          results.push({ actionId: action.id, denied: true });
-          continue;
+          // Check approval
+          const { approved } = await this.approvalGate.check(action);
+
+          await this.auditLogger.log({
+            action: action.name,
+            status: approved ? 'started' : 'denied',
+            channel: message.channel,
+            conversationId: message.conversationId,
+            userId: message.sender,
+            parameters: action.parameters,
+          });
+
+          if (!approved) {
+            const step: AgentStep = {
+              action: action.name,
+              parameters: action.parameters,
+              success: false,
+              error: 'Action denied by approval gate',
+            };
+            iterationSteps.push(step);
+            allResults.push({ actionId: action.id, denied: true });
+            continue;
+          }
+
+          // Execute
+          const result = await this.registry.execute(action);
+          allResults.push(result);
+
+          const step: AgentStep = {
+            action: action.name,
+            parameters: action.parameters,
+            success: result.success,
+            data: result.data,
+            error: result.error,
+          };
+          iterationSteps.push(step);
+
+          await this.auditLogger.log({
+            action: action.name,
+            status: result.success ? 'completed' : 'failed',
+            channel: message.channel,
+            conversationId: message.conversationId,
+            userId: message.sender,
+            parameters: action.parameters,
+            result: result.data,
+            error: result.error,
+          });
         }
 
-        // Execute
-        const result = await this.registry.execute(action);
-        results.push(result);
+        allSteps.push(...iterationSteps);
 
-        await this.auditLogger.log({
-          action: action.name,
-          status: result.success ? 'completed' : 'failed',
-          channel: message.channel,
-          conversationId: message.conversationId,
-          userId: message.sender,
-          parameters: action.parameters,
-          result: result.data,
-          error: result.error,
-        });
+        // Feed results back to Claude for follow-up reasoning
+        claudeResponse = await this.bridge.reasonWithResults(
+          agentContext,
+          message.content,
+          claudeResponse.response,
+          iterationSteps,
+        );
       }
 
       // 5. Store in memory
@@ -217,7 +250,7 @@ export class Agent {
             parameters: a.parameters,
             approval: 'auto' as const,
           })),
-          results,
+          allResults,
         );
       }
 
@@ -226,7 +259,7 @@ export class Agent {
         await channel.sendReply(message.conversationId, claudeResponse.response);
       }
 
-      return claudeResponse.response;
+      return { response: claudeResponse.response, steps: allSteps };
     } finally {
       // Restore original model after per-request override
       if (originalModel !== undefined) {

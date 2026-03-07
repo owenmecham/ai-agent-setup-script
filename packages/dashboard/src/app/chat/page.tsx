@@ -58,14 +58,76 @@ const INTERSTELLAR_QUOTES = [
   'That\'s what I love. You say science is about admitting what we don\'t know.',
 ];
 
+interface AgentStepData {
+  action: string;
+  parameters: Record<string, unknown>;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  steps?: AgentStepData[];
 }
 
 const ONBOARDING_PROMPT = `The user just arrived for the first time and has no profile set up yet. Please introduce yourself as Murph — a personal AI assistant. Be warm and conversational. Ask them about themselves: their name, where they live, what they do for work, their hobbies, and any social media handles they'd like to share. When they provide information, use the "profile.update" action to save it. You can update incrementally as they share details — you don't need to wait for everything at once.`;
+
+function ActionSteps({ steps }: { steps: AgentStepData[] }) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1">
+      {steps.map((step, i) => (
+        <div key={i} className="border border-zinc-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setExpanded((prev) => ({ ...prev, [i]: !prev[i] }))}
+            className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-zinc-800/50 transition-colors"
+          >
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${step.success ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="font-mono text-zinc-300 flex-1 truncate">{step.action}</span>
+            <span className="text-zinc-500">{expanded[i] ? '\u25B2' : '\u25BC'}</span>
+          </button>
+          {expanded[i] && (
+            <div className="px-3 py-2 border-t border-zinc-700 text-xs bg-zinc-900/50">
+              {step.error && (
+                <p className="text-red-400 mb-1">Error: {step.error}</p>
+              )}
+              {step.data !== undefined && (() => {
+                // Render base64 images inline (e.g. Playwright screenshots)
+                const dataStr = typeof step.data === 'string' ? step.data : JSON.stringify(step.data, null, 2);
+                const base64Match = typeof step.data === 'string' && step.data.match(/^data:image\/(png|jpeg|gif|webp);base64,/);
+                if (base64Match) {
+                  return <img src={step.data as string} alt="Screenshot" className="max-w-full rounded mt-1" />;
+                }
+                // Check for nested base64 in objects
+                if (typeof step.data === 'object' && step.data !== null) {
+                  const obj = step.data as Record<string, unknown>;
+                  if (typeof obj.base64 === 'string' || typeof obj.screenshot === 'string') {
+                    const b64 = (obj.base64 ?? obj.screenshot) as string;
+                    const src = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
+                    return (
+                      <div>
+                        <img src={src} alt="Screenshot" className="max-w-full rounded mt-1" />
+                        <pre className="text-zinc-400 whitespace-pre-wrap break-words mt-1 max-h-40 overflow-y-auto">{JSON.stringify({ ...obj, base64: '(shown above)', screenshot: '(shown above)' }, null, 2)}</pre>
+                      </div>
+                    );
+                  }
+                }
+                return <pre className="text-zinc-400 whitespace-pre-wrap break-words max-h-60 overflow-y-auto">{dataStr}</pre>;
+              })()}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -77,6 +139,7 @@ export default function ChatPage() {
   const [quote, setQuote] = useState('');
   const [onboarding, setOnboarding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const onboardingTriggered = useRef(false);
 
   useEffect(() => {
@@ -143,6 +206,14 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, [input]);
+
   const loadConversation = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/chat/conversations/${id}/messages`);
@@ -197,6 +268,7 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.response ?? 'No response',
         timestamp: new Date(),
+        steps: data.steps,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -286,6 +358,7 @@ export default function ChatPage() {
                   <MurphAvatar />
                   <div className="max-w-[80%] min-w-0">
                     <MarkdownMessage content={msg.content} />
+                    {msg.steps && msg.steps.length > 0 && <ActionSteps steps={msg.steps} />}
                     <p className="text-xs text-zinc-500 mt-1">
                       {msg.timestamp.toLocaleTimeString()}
                     </p>
@@ -310,14 +383,20 @@ export default function ChatPage() {
         </div>
 
         {/* Input area */}
-        <div className="flex gap-2">
-          <input
-            type="text"
+        <div className="flex gap-2 items-end">
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             placeholder="Type a message..."
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+            rows={1}
+            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 resize-none overflow-hidden"
             disabled={loading}
           />
           <button

@@ -30,5 +30,7 @@ export type {
   ClaudeBridgeResponse,
   ChannelAdapter,
   AuditEntry,
+  AgentStep,
+  HandleMessageResult,
   MurphConfig,
 } from './types.js';
