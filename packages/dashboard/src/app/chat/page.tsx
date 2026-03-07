@@ -71,8 +71,12 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [quote] = useState(() => INTERSTELLAR_QUOTES[Math.floor(Math.random() * INTERSTELLAR_QUOTES.length)]);
+  const [quote, setQuote] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setQuote(INTERSTELLAR_QUOTES[Math.floor(Math.random() * INTERSTELLAR_QUOTES.length)]);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
