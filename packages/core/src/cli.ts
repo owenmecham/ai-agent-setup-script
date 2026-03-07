@@ -150,11 +150,10 @@ async function main() {
             if (fields.length === 0) {
               return { actionId: '', success: false, error: 'No fields to update' };
             }
-            fields.push(`updated_at = NOW()`);
             await pool.query(
               `INSERT INTO user_profile (id, ${fields.map(f => f.split(' = ')[0]).join(', ')}, updated_at)
                VALUES ('default', ${values.map((_, i) => `$${i + 1}`).join(', ')}, NOW())
-               ON CONFLICT (id) DO UPDATE SET ${fields.join(', ')}`,
+               ON CONFLICT (id) DO UPDATE SET ${fields.join(', ')}, updated_at = NOW()`,
               values,
             );
             return { actionId: '', success: true, data: { updated: true } };
