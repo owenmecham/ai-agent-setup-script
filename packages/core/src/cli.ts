@@ -164,11 +164,14 @@ async function main() {
 
       await agent.start();
 
-      // Start dashboard in production mode
-      const dashboardProc: ChildProcess = spawn('pnpm', ['--filter=@murph/dashboard', 'start'], {
-        cwd: process.cwd(),
+      // Start dashboard in standalone mode
+      const { join: pathJoin } = await import('node:path');
+      const dashboardServerPath = pathJoin(process.cwd(), 'packages', 'dashboard', '.next', 'standalone', 'packages', 'dashboard', 'server.js');
+      const dashboardProc: ChildProcess = spawn('node', [dashboardServerPath], {
+        cwd: pathJoin(process.cwd(), 'packages', 'dashboard'),
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false,
+        env: { ...process.env, PORT: '3141', HOSTNAME: 'localhost' },
       });
 
       dashboardProc.stderr?.on('data', (data: Buffer) => {
