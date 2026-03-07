@@ -15,6 +15,7 @@
     "@murph/mcp-client": "workspace:*",
     "@murph/config": "workspace:*",
     "@murph/memory": "workspace:*",
+    "@murph/scheduler": "workspace:*",
     "@murph/security": "workspace:*",
     "@murph/knowledge": "workspace:*",
     "pg": "^8.13.0",

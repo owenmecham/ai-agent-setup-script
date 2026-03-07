@@ -98,6 +98,9 @@ importers:
       '@murph/memory':
         specifier: workspace:*
         version: link:../memory
+      '@murph/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@murph/security':
         specifier: workspace:*
         version: link:../security

@@ -163,6 +163,123 @@ async function main() {
         },
       });
 
+      // Wire up scheduler and register scheduler actions
+      let scheduler: import('@murph/scheduler').Scheduler | null = null;
+      try {
+        const { Scheduler } = await import('@murph/scheduler');
+        const schedulerPool = getPool(config.database.url);
+        scheduler = new Scheduler(schedulerPool);
+
+        // When a task fires, execute its action through the registry
+        scheduler.onTaskDue(async (task) => {
+          logger.info({ taskId: task.id, action: task.action }, 'Scheduled task firing');
+          try {
+            const result = await agent.getRegistry().execute({
+              id: task.id,
+              name: task.action,
+              description: '',
+              parameters: task.parameters,
+              approval: 'auto',
+            });
+            logger.info({ taskId: task.id, success: result.success }, 'Scheduled task completed');
+          } catch (err) {
+            logger.error({ taskId: task.id, err }, 'Scheduled task failed');
+          }
+        });
+
+        await scheduler.start();
+        logger.info('Scheduler started');
+
+        agent.getRegistry().register({
+          name: 'scheduler.create',
+          description: 'Create a scheduled task. Params: name (string), cronExpression (string, e.g. "0 9 * * *"), action (string — action to run), parameters (object, optional), enabled (boolean, default true)',
+          parameterSchema: {
+            type: 'object',
+            required: ['name', 'cronExpression', 'action'],
+            properties: {
+              name: { type: 'string' },
+              cronExpression: { type: 'string' },
+              action: { type: 'string' },
+              parameters: { type: 'object' },
+              enabled: { type: 'boolean' },
+            },
+          },
+          execute: async (params) => {
+            try {
+              const task = await scheduler!.createTask({
+                name: params.name as string,
+                cronExpression: params.cronExpression as string,
+                action: params.action as string,
+                parameters: (params.parameters as Record<string, unknown>) ?? {},
+                enabled: params.enabled !== false,
+              });
+              return { actionId: '', success: true, data: task };
+            } catch (err) {
+              return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+          },
+        });
+
+        agent.getRegistry().register({
+          name: 'scheduler.list',
+          description: 'List all scheduled tasks',
+          execute: async () => {
+            try {
+              const tasks = await scheduler!.listTasks();
+              return { actionId: '', success: true, data: tasks };
+            } catch (err) {
+              return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+          },
+        });
+
+        agent.getRegistry().register({
+          name: 'scheduler.delete',
+          description: 'Delete a scheduled task by ID',
+          parameterSchema: {
+            type: 'object',
+            required: ['id'],
+            properties: { id: { type: 'string' } },
+          },
+          execute: async (params) => {
+            try {
+              await scheduler!.deleteTask(params.id as string);
+              return { actionId: '', success: true, data: { deleted: true } };
+            } catch (err) {
+              return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+          },
+        });
+
+        agent.getRegistry().register({
+          name: 'scheduler.update',
+          description: 'Update a scheduled task. Params: id (string, required), name (string), cronExpression (string), action (string), parameters (object), enabled (boolean)',
+          parameterSchema: {
+            type: 'object',
+            required: ['id'],
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              cronExpression: { type: 'string' },
+              action: { type: 'string' },
+              parameters: { type: 'object' },
+              enabled: { type: 'boolean' },
+            },
+          },
+          execute: async (params) => {
+            try {
+              const { id, ...updates } = params;
+              await scheduler!.updateTask(id as string, updates);
+              return { actionId: '', success: true, data: { updated: true } };
+            } catch (err) {
+              return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
+            }
+          },
+        });
+      } catch (err) {
+        logger.warn({ err }, 'Failed to start Scheduler — running without scheduler');
+      }
+
       await agent.start();
 
       // Start dashboard in standalone mode
@@ -200,6 +317,10 @@ async function main() {
         if (dashboardProc.pid && !dashboardProc.killed) {
           dashboardProc.kill();
           logger.info('Dashboard stopped');
+        }
+        if (scheduler) {
+          await scheduler.stop();
+          logger.info('Scheduler stopped');
         }
         if (mcpManager) {
           await mcpManager.disconnectAll();
