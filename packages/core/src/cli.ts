@@ -118,6 +118,7 @@ async function main() {
           agent.getRegistry().register({
             name: proxy.name,
             description: proxy.description,
+            parameterSchema: proxy.parameterSchema,
             execute: proxy.execute,
           });
         }

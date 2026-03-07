@@ -22,6 +22,7 @@ export class ActionRegistry {
     return Array.from(this.handlers.values()).map((h) => ({
       name: h.name,
       description: h.description,
+      parameterSchema: h.parameterSchema,
     }));
   }
 

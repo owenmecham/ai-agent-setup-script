@@ -4,25 +4,6 @@ import { createLogger } from './logger.js';
 
 const logger = createLogger('claude-bridge');
 
-const RESPONSE_SCHEMA = JSON.stringify({
-  type: 'object',
-  properties: {
-    response: { type: 'string', description: 'The text response to send to the user' },
-    actions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          parameters: { type: 'object' },
-        },
-        required: ['name', 'parameters'],
-      },
-    },
-  },
-  required: ['response', 'actions'],
-});
-
 export class ClaudeBridge {
   private model: string;
 
@@ -104,6 +85,10 @@ export class ClaudeBridge {
 
     parts.push('You are Murph, a personal AI assistant. Respond helpfully and take actions when appropriate.');
     parts.push('');
+    parts.push('When you need to interact with the outside world — browse the web, fetch data, automate a browser, or perform any external task — use the Available Actions listed below. Include actions in the "actions" array of your JSON response with the correct "name" and "parameters".');
+    parts.push('');
+    parts.push('If you have an action that can accomplish what the user is asking, use it confidently. If no relevant action exists, explain what capability would be needed and suggest the user configure it.');
+    parts.push('');
 
     if (context.userProfile) {
       const p = context.userProfile;
@@ -163,11 +148,40 @@ export class ClaudeBridge {
 
     if (context.availableTools.length > 0) {
       parts.push('## Available Actions');
-      parts.push('You can request these actions by including them in the "actions" array of your JSON response.');
-      for (const tool of context.availableTools) {
-        parts.push(`- ${tool.name}: ${tool.description}`);
-      }
+      parts.push('These are your tools for interacting with the outside world. Use them by including entries in the "actions" array of your JSON response with the correct "name" and "parameters".');
       parts.push('');
+      for (const tool of context.availableTools) {
+        parts.push(`### ${tool.name}`);
+        parts.push(tool.description);
+        if (tool.parameterSchema) {
+          const schema = tool.parameterSchema;
+          const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
+          const required = (schema.required as string[]) ?? [];
+          if (properties && Object.keys(properties).length > 0) {
+            parts.push('Parameters:');
+            for (const [param, def] of Object.entries(properties)) {
+              const isRequired = required.includes(param);
+              const typeStr = def.type ? ` (${def.type})` : '';
+              const reqStr = isRequired ? ' [required]' : ' [optional]';
+              const descStr = def.description ? ` — ${def.description}` : '';
+              parts.push(`  - ${param}${typeStr}${reqStr}${descStr}`);
+            }
+          }
+        }
+        parts.push('');
+      }
+
+      // Add Playwright usage hints when browser tools are detected
+      const hasPlaywright = context.availableTools.some((t) => t.name.includes('playwright') || t.name.includes('browser_'));
+      if (hasPlaywright) {
+        parts.push('### Web Browsing Patterns');
+        parts.push('To browse the web with Playwright, use this multi-step pattern:');
+        parts.push('1. Navigate to a URL with browser_navigate');
+        parts.push('2. Take a snapshot of the page with browser_snapshot to see its content');
+        parts.push('3. Extract the information you need from the snapshot');
+        parts.push('4. If needed, interact with elements (click, fill) and snapshot again');
+        parts.push('');
+      }
     }
 
     parts.push('## User Message');

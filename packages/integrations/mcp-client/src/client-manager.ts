@@ -75,8 +75,8 @@ export class McpClientManager {
     }
   }
 
-  getTools(serverName?: string): Array<{ server: string; name: string; description: string }> {
-    const result: Array<{ server: string; name: string; description: string }> = [];
+  getTools(serverName?: string): Array<{ server: string; name: string; description: string; inputSchema?: unknown }> {
+    const result: Array<{ server: string; name: string; description: string; inputSchema?: unknown }> = [];
 
     for (const [name, managed] of this.clients) {
       if (serverName && name !== serverName) continue;
@@ -85,6 +85,7 @@ export class McpClientManager {
           server: name,
           name: `${name}.${tool.name}`,
           description: tool.description,
+          inputSchema: tool.inputSchema,
         });
       }
     }

@@ -3,6 +3,7 @@ import type { McpClientManager } from './client-manager.js';
 export interface ProxiedTool {
   name: string;
   description: string;
+  parameterSchema?: Record<string, unknown>;
   execute: (params: Record<string, unknown>) => Promise<{
     actionId: string;
     success: boolean;
@@ -20,6 +21,7 @@ export function createToolProxies(manager: McpClientManager): ProxiedTool[] {
     return {
       name: `mcp.${tool.name}`,
       description: `[MCP:${serverName}] ${tool.description}`,
+      parameterSchema: tool.inputSchema as Record<string, unknown> | undefined,
       execute: async (params) => {
         try {
           const result = await manager.callTool(serverName, toolName, params);

@@ -88,6 +88,7 @@ export interface Entity {
 export interface ToolDescription {
   name: string;
   description: string;
+  parameterSchema?: Record<string, unknown>;
 }
 
 export interface ClaudeBridgeResponse {
