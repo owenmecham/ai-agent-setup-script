@@ -20,7 +20,7 @@ security:
     imessage.send: require
     telegram.send: notify
     bop.*: require
-    mcp.*: require
+    mcp.*: auto
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
