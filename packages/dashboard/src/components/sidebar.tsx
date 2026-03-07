@@ -30,7 +30,7 @@ export function Sidebar() {
           className="w-full h-auto rounded-lg"
           priority
         />
-        <p className="text-xs text-zinc-500 mt-2 text-center">AI Agent Dashboard</p>
+
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
