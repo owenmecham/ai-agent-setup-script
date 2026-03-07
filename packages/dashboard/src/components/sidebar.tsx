@@ -9,6 +9,7 @@ const navItems = [
   { href: '/', label: 'Home', icon: '⌂' },
   { href: '/profile', label: 'Profile', icon: '👤' },
   { href: '/chat', label: 'Chat', icon: '💬' },
+  { href: '/approvals', label: 'Approvals', icon: '✅' },
   { href: '/knowledge', label: 'Knowledge', icon: '📚' },
   { href: '/memory', label: 'Memory', icon: '🧠' },
   { href: '/scheduler', label: 'Scheduler', icon: '⏰' },

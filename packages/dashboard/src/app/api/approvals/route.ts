@@ -17,10 +17,15 @@ export async function GET(_request: NextRequest) {
         const { join } = await import('node:path');
 
         const socketPath = join(homedir(), '.murph', 'agent.sock');
+        const listRequestId = crypto.randomUUID();
 
         const socket = createConnection(socketPath, () => {
-          // Subscribe to approval events by sending a status request
-          // The agent will push events as they happen
+          // Request existing pending approvals on connection
+          socket.write(JSON.stringify({
+            id: listRequestId,
+            method: 'approvals.list',
+            params: {},
+          }) + '\n');
         });
 
         let buffer = '';
@@ -33,6 +38,19 @@ export async function GET(_request: NextRequest) {
             if (!line.trim()) continue;
             try {
               const msg = JSON.parse(line);
+
+              // Handle response to our approvals.list request
+              if (msg.id === listRequestId && msg.result) {
+                const pending = Array.isArray(msg.result) ? msg.result : [];
+                for (const approval of pending) {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ type: 'approval', ...approval })}\n\n`)
+                  );
+                }
+                continue;
+              }
+
+              // Handle real-time broadcast events
               if (msg.event === 'approval-required') {
                 controller.enqueue(
                   encoder.encode(`data: ${JSON.stringify({ type: 'approval', ...msg.data })}\n\n`)

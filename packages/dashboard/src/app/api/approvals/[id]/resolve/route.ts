@@ -16,23 +16,26 @@ export async function POST(
     const socketPath = join(homedir(), '.murph', 'agent.sock');
 
     return new Promise<Response>((resolve) => {
+      const requestId = crypto.randomUUID();
       const socket = createConnection(socketPath, () => {
-        const request = {
-          id: crypto.randomUUID(),
+        const ipcRequest = {
+          id: requestId,
           method: 'approvals.resolve',
           params: { requestId: id, approved, resolvedBy: 'dashboard-user' },
         };
-        socket.write(JSON.stringify(request) + '\n');
+        socket.write(JSON.stringify(ipcRequest) + '\n');
       });
 
       let buffer = '';
       socket.on('data', (data) => {
         buffer += data.toString();
         const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
             const response = JSON.parse(line);
+            if (response.id !== requestId) continue;
             socket.destroy();
             resolve(NextResponse.json(response.result ?? { ok: true }));
             return;
