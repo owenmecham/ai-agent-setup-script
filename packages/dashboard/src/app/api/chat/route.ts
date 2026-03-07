@@ -16,9 +16,10 @@ export async function POST(request: NextRequest) {
     const socketPath = join(homedir(), '.murph', 'agent.sock');
 
     return new Promise<Response>((resolve) => {
+      const requestId = crypto.randomUUID();
       const socket = createConnection(socketPath, () => {
         const ipcRequest = {
-          id: crypto.randomUUID(),
+          id: requestId,
           method: 'chat.send',
           params: {
             message,
@@ -33,10 +34,13 @@ export async function POST(request: NextRequest) {
       socket.on('data', (data) => {
         buffer += data.toString();
         const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
             const response = JSON.parse(line);
+            // Ignore broadcast events — only handle the response matching our request
+            if (response.id !== requestId) continue;
             socket.destroy();
             if (response.error) {
               resolve(NextResponse.json({ error: response.error }, { status: 500 }));
