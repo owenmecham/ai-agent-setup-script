@@ -41,10 +41,15 @@ export class McpClientManager {
 
       // Capture stderr for diagnostics
       let stderrOutput = '';
+      let stderrEnded = false;
       const stderrStream = transport.stderr;
-      if (stderrStream && 'on' in stderrStream) {
-        (stderrStream as import('node:stream').Readable).on('data', (chunk: Buffer) => {
+      if (stderrStream) {
+        const readable = stderrStream as import('node:stream').Readable;
+        readable.on('data', (chunk: Buffer) => {
           stderrOutput += chunk.toString();
+        });
+        readable.on('end', () => {
+          stderrEnded = true;
         });
       }
 
@@ -52,6 +57,14 @@ export class McpClientManager {
       try {
         await client.connect(transport);
       } catch (err) {
+        // Wait for stderr to drain — the pipe may not have flushed yet
+        if (stderrStream && !stderrEnded) {
+          await new Promise<void>((resolve) => {
+            const readable = stderrStream as import('node:stream').Readable;
+            readable.on('end', resolve);
+            setTimeout(resolve, 500);
+          });
+        }
         if (stderrOutput) {
           logger.error({ name: config.name, stderr: stderrOutput.trim() }, 'MCP server stderr output');
         }
