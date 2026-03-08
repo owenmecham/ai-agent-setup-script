@@ -22,6 +22,12 @@ security:
     telegram.send: notify
     bop.*: require
     mcp.*: auto
+    mcp.google.gmail.users.messages.send: require
+    mcp.google.gmail.users.drafts.send: require
+    mcp.google.calendar.events.insert: notify
+    mcp.google.calendar.events.delete: require
+    mcp.google.drive.files.delete: require
+    mcp.google.drive.files.create: notify
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
@@ -34,6 +40,13 @@ security:
     profile.update: auto
     knowledge.ingest: auto
     knowledge.delete: require
+    email-maintenance.run: auto
+    email-maintenance.mark_read: notify
+    email-maintenance.archive: notify
+    email-maintenance.apply_label: auto
+    email-maintenance.create_task: notify
+    email-maintenance.reply: require
+    email-maintenance.forward: notify
 
 channels:
   imessage:
@@ -62,13 +75,16 @@ mcp_servers:
     transport: "stdio"
     command: "npx"
     args: ["@playwright/mcp@latest"]
+  - name: "google"
+    transport: "stdio"
+    command: "gws"
+    args: ["mcp", "-s", "drive,gmail,calendar,tasks,sheets,docs,slides"]
+  - name: "plaud"
+    transport: "stdio"
+    command: "plaud-mcp"
 
 integrations:
   bop:
-    enabled: false
-  gmail:
-    enabled: false
-  gdrive:
     enabled: false
   gohighlevel:
     enabled: false
@@ -86,6 +102,40 @@ creator:
 
 scheduler:
   enabled: true
+
+email_maintenance:
+  enabled: false
+  goal: ""
+  model: "haiku"
+  cadence: "1h"
+  next_steps: ""
+  gmail_query: ""
+  lookback_window: "24h"
+  max_emails_per_run: 50
+  only_unread: true
+  scan_labels: []
+  snippet_length: 1000
+  mark_read: false
+  archive: false
+  apply_label: ""
+  auto_tasking: false
+  task_list: "@default"
+  reply_enabled: false
+  reply_mode: "draft"
+  forward_to: ""
+  calendar_aware: false
+  max_budget_per_run_usd: 0.25
+  batch_size: 20
+  run_window_start: ""
+  run_window_end: ""
+  notify_channel: "dashboard"
+  notify_on: "matches_only"
+  privacy_keywords: []
+
+auto_update:
+  enabled: true
+  check_interval_hours: 1
+  install_hour: 1  # 1 AM local time
 
 acknowledgment:
   enabled: true

@@ -316,6 +316,26 @@ else
   ok
 fi
 
+# 7b. uv (Python package manager — needed for Plaud MCP)
+check "uv (Python package manager)"
+if command -v uv &>/dev/null; then
+  skip
+else
+  installing
+  brew install uv
+  ok
+fi
+
+# Ensure uv tool binaries are on PATH
+export PATH="$HOME/.local/bin:$PATH"
+if ! grep -q '\.local/bin' "$HOME/.zshrc" 2>/dev/null; then
+  cat >> "$HOME/.zshrc" <<'ZSHRC'
+
+# uv tool binaries
+export PATH="$HOME/.local/bin:$PATH"
+ZSHRC
+fi
+
 # 8. PostgreSQL + pgvector
 check "PostgreSQL 16"
 if brew list postgresql@16 &>/dev/null; then
@@ -461,6 +481,30 @@ else
   ok
 fi
 
+# 10a. Google Cloud SDK (required by gws CLI)
+check "Google Cloud SDK (gcloud)"
+if command -v gcloud &>/dev/null; then
+  skip
+else
+  installing
+  brew install --cask google-cloud-sdk
+  # Source gcloud shell integration for the current session
+  if [ -f "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc" ]; then
+    source "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc"
+  fi
+  ok
+fi
+
+# 10b. Google Workspace CLI (auth deferred to `pnpm murph google-auth`)
+check "Google Workspace CLI"
+if command -v gws &>/dev/null; then
+  skip
+else
+  installing
+  npm install -g @googleworkspace/cli@0.6.3
+  ok
+fi
+
 # Ensure npm global bin is on PATH (needed when nvm was just installed)
 NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin" || true
 if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
@@ -474,6 +518,35 @@ if [ -d "/Applications/Claude.app" ]; then
 else
   installing
   brew install --cask claude
+  ok
+fi
+
+# 11b. Obsidian
+check "Obsidian"
+if [ -d "/Applications/Obsidian.app" ]; then
+  skip
+else
+  installing
+  brew install --cask obsidian
+  ok
+fi
+
+# 11c. Plaud Desktop
+check "Plaud Desktop"
+if [ -d "/Applications/PLAUD.app" ]; then
+  skip
+else
+  echo -e "${YELLOW}MANUAL STEP${NC}"
+  echo "  Download from: https://global.plaud.ai/pages/app-download"
+fi
+
+# 11d. Google Chrome
+check "Google Chrome"
+if [ -d "/Applications/Google Chrome.app" ]; then
+  skip
+else
+  installing
+  brew install --cask google-chrome
   ok
 fi
 
@@ -493,6 +566,37 @@ fi
 
 echo ""
 echo "======================================"
+echo "  Upgrading installed tools..."
+echo "======================================"
+
+# Brew formulae (git, python, uv, postgresql, ollama, etc.)
+check "Brew formulae upgrades"
+brew upgrade 2>/dev/null || true
+ok
+
+# Brew casks (Claude Desktop, Obsidian, Google Chrome)
+check "Brew cask upgrades"
+brew upgrade --cask 2>/dev/null || true
+ok
+
+# npm globals (claude-code, gws)
+check "npm global upgrades"
+npm update -g @anthropic-ai/claude-code 2>/dev/null || true
+npm install -g @googleworkspace/cli@0.6.3 2>/dev/null || true
+ok
+
+# pnpm globals (wrangler)
+check "pnpm global upgrades"
+pnpm update -g 2>/dev/null || true
+ok
+
+# uv tools (plaud-mcp)
+check "uv tool upgrades"
+uv tool upgrade --all 2>/dev/null || true
+ok
+
+echo ""
+echo "======================================"
 echo "  Installing project dependencies..."
 echo "======================================"
 pnpm install
@@ -502,6 +606,20 @@ check "Playwright Chromium"
 installing
 pnpm dlx playwright@latest install chromium
 ok
+
+# 14. Plaud MCP server (optional — requires Plaud Desktop)
+check "Plaud MCP server"
+if command -v plaud-mcp &>/dev/null; then
+  skip
+else
+  if [ -d "/Applications/PLAUD.app" ]; then
+    installing
+    uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"
+    ok
+  else
+    echo -e "${YELLOW}Skipped${NC} (Plaud Desktop not installed)"
+  fi
+fi
 
 echo ""
 echo "======================================"
@@ -632,16 +750,18 @@ echo ""
 echo "  3. Telegram setup (if needed):"
 echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
 echo ""
-echo "  4. Google API setup (for Gmail/Drive):"
-echo "     - Create a project in Google Cloud Console"
-echo "     - Enable Gmail and Drive APIs"
-echo "     - Create OAuth 2.0 credentials"
-echo "     - Download credentials.json"
+echo "  4. Google Workspace setup (optional — run when ready):"
+echo "     pnpm murph google-auth"
+echo "     (Walks through Google Cloud project setup + browser OAuth)"
 echo ""
-echo "  5. Run diagnostics:"
+echo "  5. Plaud Desktop (if needed):"
+echo "     Download from https://global.plaud.ai/pages/app-download"
+echo "     Sign in, then run: pnpm murph setup-plaud"
+echo ""
+echo "  6. Run diagnostics:"
 echo "     pnpm murph doctor"
 echo ""
-echo "  6. Start Murph:"
+echo "  7. Start Murph:"
 echo "     Option A (recommended): Use the install wizard for LaunchAgent setup:"
 echo "       cd $INSTALL_DIR && node packages/installer/dist/server.js"
 echo "       Then open http://localhost:3142 in your browser"

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import murphLogo from '../app/murph.jpg';
 
 const navItems = [
@@ -13,25 +14,59 @@ const navItems = [
   { href: '/knowledge', label: 'Knowledge', icon: '📚' },
   { href: '/memory', label: 'Memory', icon: '🧠' },
   { href: '/scheduler', label: 'Scheduler', icon: '⏰' },
+  { href: '/email-maintenance', label: 'Email Maint.', icon: '📧' },
   { href: '/integrations', label: 'Integrations', icon: '🔌' },
   { href: '/audit', label: 'Audit Log', icon: '📋' },
   { href: '/secrets', label: 'Secrets', icon: '🔐' },
   { href: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
+interface SidebarConfig {
+  agent: { name: string };
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: async () => {
+      const res = await fetch('/api/config');
+      return res.json() as Promise<SidebarConfig>;
+    },
+  });
+
+  const { data: avatarStatus } = useQuery({
+    queryKey: ['avatar'],
+    queryFn: async () => {
+      const res = await fetch('/api/avatar');
+      return res.json() as Promise<{ hasCustom: boolean; timestamp?: number }>;
+    },
+  });
+
+  const agentName = config?.agent?.name ?? 'Murph';
+  const hasCustomAvatar = avatarStatus?.hasCustom ?? false;
+  const avatarTimestamp = avatarStatus?.timestamp ?? 0;
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
       <div className="p-4 border-b border-zinc-800">
-        <Image
-          src={murphLogo}
-          alt="Murph"
-          className="w-full h-auto rounded-lg"
-          priority
-        />
-
+        {hasCustomAvatar ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={`/api/avatar/image?t=${avatarTimestamp}`}
+            alt={agentName}
+            className="w-full h-auto rounded-lg"
+          />
+        ) : (
+          <Image
+            src={murphLogo}
+            alt={agentName}
+            className="w-full h-auto rounded-lg"
+            priority
+          />
+        )}
+        <p className="text-center text-sm font-medium text-zinc-300 mt-2">{agentName}</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">

@@ -5,6 +5,13 @@ import { initLogger, createLogger } from './logger.js';
 const logger = createLogger('cli');
 
 async function main() {
+  // Ensure uv tool binaries (~/.local/bin) are reachable even in non-interactive shells
+  const home = process.env.HOME ?? '';
+  const localBin = `${home}/.local/bin`;
+  if (home && !process.env.PATH?.includes(localBin)) {
+    process.env.PATH = `${localBin}:${process.env.PATH ?? ''}`;
+  }
+
   const args = process.argv.slice(2);
   const command = args[0];
 
@@ -373,6 +380,49 @@ async function main() {
         logger.warn({ err }, 'Failed to start Scheduler — running without scheduler');
       }
 
+      // Wire up email maintenance engine
+      let emailMaintenanceEngine: import('./email-maintenance.js').EmailMaintenanceEngine | null = null;
+      if (config.email_maintenance.enabled && mcpManager) {
+        try {
+          const { EmailMaintenanceEngine } = await import('./email-maintenance.js');
+          const emPool = getPool(config.database.url);
+          emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager, emPool, config.agent.timezone);
+          emailMaintenanceEngine.startCron(config.email_maintenance);
+          agent.setEmailMaintenance(emailMaintenanceEngine);
+          logger.info('Email maintenance engine started');
+        } catch (err) {
+          logger.warn({ err }, 'Failed to start email maintenance engine');
+        }
+      } else if (!config.email_maintenance.enabled) {
+        logger.info('Email maintenance disabled by config');
+      }
+
+      // Listen for config changes on email_maintenance paths
+      if (configManager) {
+        configManager.on('config:changed', (event: import('@murph/config').ConfigChangeEvent) => {
+          for (const path of event.changedPaths) {
+            if (path.startsWith('email_maintenance')) {
+              if (emailMaintenanceEngine) {
+                emailMaintenanceEngine.reconfigure(event.current.email_maintenance);
+                logger.info('Email maintenance engine reconfigured');
+              } else if (event.current.email_maintenance.enabled && mcpManager) {
+                // Engine wasn't created before, create now
+                import('./email-maintenance.js').then(({ EmailMaintenanceEngine }) => {
+                  const emPool = getPool(config.database.url);
+                  emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager!, emPool, event.current.agent.timezone);
+                  emailMaintenanceEngine.startCron(event.current.email_maintenance);
+                  agent.setEmailMaintenance(emailMaintenanceEngine);
+                  logger.info('Email maintenance engine started after config change');
+                }).catch(err => {
+                  logger.error({ err }, 'Failed to start email maintenance engine after config change');
+                });
+              }
+              break;
+            }
+          }
+        });
+      }
+
       // Register system.update action
       agent.getRegistry().register({
         name: 'system.update',
@@ -426,6 +476,16 @@ async function main() {
         }
       }, 60 * 60 * 1000); // every hour
 
+      // Wire up auto-updater
+      let autoUpdater: import('./auto-updater.js').AutoUpdater | null = null;
+      if (config.auto_update.enabled) {
+        const { AutoUpdater } = await import('./auto-updater.js');
+        autoUpdater = new AutoUpdater(config.auto_update, process.cwd(), config.agent.timezone);
+        autoUpdater.start();
+      } else {
+        logger.info('Auto-updater disabled by config');
+      }
+
       await agent.start();
 
       // Start dashboard in standalone mode
@@ -465,6 +525,13 @@ async function main() {
           dashboardProc.kill();
           logger.info('Dashboard stopped');
         }
+        if (autoUpdater) {
+          autoUpdater.stop();
+        }
+        if (emailMaintenanceEngine) {
+          emailMaintenanceEngine.stopCron();
+          logger.info('Email maintenance engine stopped');
+        }
         if (scheduler) {
           await scheduler.stop();
           logger.info('Scheduler stopped');
@@ -484,6 +551,190 @@ async function main() {
 
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);
+      break;
+    }
+
+    case 'google-auth': {
+      const { execSync, spawnSync } = await import('node:child_process');
+
+      // 1. Check if gws is installed, install if missing
+      console.log('Google Workspace CLI Setup');
+      console.log('─'.repeat(40));
+      console.log('');
+
+      try {
+        execSync('which gws', { stdio: 'ignore' });
+        console.log('✓ gws CLI is installed');
+      } catch {
+        console.log('Installing Google Workspace CLI...');
+        try {
+          execSync('npm install -g @googleworkspace/cli', { stdio: 'inherit' });
+          console.log('✓ gws CLI installed');
+        } catch (err) {
+          console.error('✗ Failed to install gws CLI. Try manually: npm install -g @googleworkspace/cli');
+          process.exit(1);
+        }
+      }
+
+      console.log('');
+      console.log('Step 1: Google Cloud project setup');
+      console.log('This will walk you through creating a Google Cloud project');
+      console.log('and enabling the required APIs.');
+      console.log('');
+
+      // 2. Run gws auth setup (interactive)
+      const setupResult = spawnSync('gws', ['auth', 'setup'], {
+        stdio: 'inherit',
+        shell: true,
+      });
+
+      if (setupResult.status !== 0) {
+        console.error('');
+        console.error('✗ gws auth setup failed. You can retry with: pnpm murph google-auth');
+        process.exit(1);
+      }
+
+      console.log('');
+      console.log('Step 2: Browser-based OAuth login');
+      console.log('A browser window will open for you to authorize access.');
+      console.log('');
+
+      // 3. Run gws auth login (opens browser)
+      const loginResult = spawnSync('gws', ['auth', 'login', '-s', 'drive,gmail,calendar,tasks,sheets,docs,slides'], {
+        stdio: 'inherit',
+        shell: true,
+      });
+
+      if (loginResult.status !== 0) {
+        console.error('');
+        console.error('✗ gws auth login failed. You can retry with: pnpm murph google-auth');
+        process.exit(1);
+      }
+
+      console.log('');
+      console.log('Step 3: Verifying authentication...');
+
+      // 4. Verify auth works
+      const verifyResult = spawnSync('gws', ['gmail', 'users', 'getProfile', '--userId', 'me'], {
+        stdio: 'pipe',
+        shell: true,
+      });
+
+      if (verifyResult.status === 0) {
+        console.log('✓ Google authentication successful!');
+        console.log('');
+        console.log('Google Workspace is now connected. Available services:');
+        console.log('  • Gmail — read, search, send email');
+        console.log('  • Calendar — view and manage events');
+        console.log('  • Tasks — manage task lists');
+        console.log('  • Drive — search, read, and manage files');
+        console.log('  • Sheets — read and edit spreadsheets');
+        console.log('  • Docs — read and edit documents');
+        console.log('  • Slides — read and edit presentations');
+        console.log('');
+        console.log('The Google MCP server is configured in murph.config.yaml.');
+        console.log('Restart Murph to activate: pnpm murph start');
+      } else {
+        const stdout = verifyResult.stdout?.toString().trim();
+        const stderr = verifyResult.stderr?.toString().trim();
+        console.error('');
+        console.error('✗ Authentication verification failed.');
+        if (stdout) console.error('  stdout:', stdout);
+        if (stderr) console.error('  stderr:', stderr);
+        console.error('  The OAuth flow may not have completed. Try again:');
+        console.error('  pnpm murph google-auth');
+        process.exit(1);
+      }
+      break;
+    }
+
+    case 'setup-plaud': {
+      const { execSync } = await import('node:child_process');
+      const { existsSync } = await import('node:fs');
+      const { readFileSync, writeFileSync } = await import('node:fs');
+      const { join: pathJoin } = await import('node:path');
+
+      console.log('Plaud MCP Setup');
+      console.log('─'.repeat(40));
+      console.log('');
+
+      // 1. Check Plaud Desktop
+      if (!existsSync('/Applications/PLAUD.app')) {
+        console.error('✗ Plaud Desktop is not installed.');
+        console.error('  Download from: https://global.plaud.ai/pages/app-download');
+        console.error('  Install and sign in, then re-run this command.');
+        process.exit(1);
+      }
+      console.log('✓ Plaud Desktop is installed');
+
+      // 2. Check uv
+      try {
+        execSync('which uv', { stdio: 'ignore' });
+        console.log('✓ uv is installed');
+      } catch {
+        console.log('Installing uv...');
+        try {
+          execSync('brew install uv', { stdio: 'inherit' });
+          console.log('✓ uv installed');
+        } catch {
+          console.error('✗ Failed to install uv. Try manually: brew install uv');
+          process.exit(1);
+        }
+      }
+
+      // 3. Install Plaud MCP
+      try {
+        execSync('which plaud-mcp', { stdio: 'ignore' });
+        console.log('✓ plaud-mcp is already installed');
+      } catch {
+        console.log('Installing Plaud MCP server...');
+        try {
+          execSync('uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"', {
+            stdio: 'inherit',
+          });
+          console.log('✓ plaud-mcp installed');
+        } catch {
+          console.error('✗ Failed to install plaud-mcp.');
+          console.error('  Try manually: uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"');
+          process.exit(1);
+        }
+      }
+
+      // 4. Check if Plaud MCP server is in config
+      const configPath = pathJoin(process.cwd(), 'murph.config.yaml');
+      if (existsSync(configPath)) {
+        const configContent = readFileSync(configPath, 'utf-8');
+        if (!configContent.includes('name: "plaud"')) {
+          console.log('');
+          console.log('Adding Plaud MCP server to murph.config.yaml...');
+          const plaudEntry = '\n  - name: "plaud"\n    transport: "stdio"\n    command: "plaud-mcp"\n';
+          const updated = configContent.replace(
+            /(mcp_servers:.*(?:\n  - .*)*)/,
+            `$1${plaudEntry}`,
+          );
+          writeFileSync(configPath, updated, 'utf-8');
+          console.log('✓ Plaud MCP server added to config');
+        } else {
+          console.log('✓ Plaud MCP server already in config');
+        }
+      }
+
+      // 5. Verify connection
+      console.log('');
+      console.log('Verifying Plaud Desktop connection...');
+      try {
+        const result = execSync('plaud-mcp --help 2>&1', {
+          timeout: 10000,
+          encoding: 'utf-8',
+        });
+        console.log('✓ plaud-mcp is functional');
+      } catch {
+        console.log('! Could not verify plaud-mcp. Ensure Plaud Desktop is running and signed in.');
+      }
+
+      console.log('');
+      console.log('Plaud MCP setup complete.');
+      console.log('Restart Murph to activate: pnpm murph start');
       break;
     }
 
@@ -516,6 +767,8 @@ async function main() {
       console.log('  start              Start the agent');
       console.log('  tui                Launch terminal UI');
       console.log('  doctor             Run system diagnostics');
+      console.log('  google-auth        Set up Google Workspace (OAuth)');
+      console.log('  setup-plaud        Set up Plaud MCP server');
       console.log('  secret set <n> <v> Store a secret');
       console.log('  secret list        List all secrets');
       console.log('  secret delete <n>  Delete a secret');

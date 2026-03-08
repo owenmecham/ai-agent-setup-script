@@ -35,10 +35,84 @@ export class McpClientManager {
       const transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
+        env: process.env as Record<string, string>,
+        stderr: 'pipe',
       });
 
+      // Capture stderr for diagnostics
+      let stderrOutput = '';
+      let stderrEnded = false;
+      const stderrStream = transport.stderr;
+      if (stderrStream) {
+        const readable = stderrStream as import('node:stream').Readable;
+        readable.on('data', (chunk: Buffer) => {
+          stderrOutput += chunk.toString();
+        });
+        readable.on('end', () => {
+          stderrEnded = true;
+        });
+      }
+
+      // Capture transport-level errors (spawn failures, stdin/stdout errors)
+      const transportErrors: string[] = [];
+      transport.onerror = (error: Error) => {
+        transportErrors.push(error.message);
+      };
+
+      // Capture exit code — override start() to hook the ChildProcess 'close'
+      // event before the SDK nulls _process (stdio.js:83-84)
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
+      let rawStdout = '';
+      const originalStart = transport.start.bind(transport);
+      transport.start = async function () {
+        await originalStart();
+        const proc = (transport as any)._process as
+          | import('node:child_process').ChildProcess
+          | undefined;
+        if (proc) {
+          proc.stdout?.on('data', (chunk: Buffer) => {
+            rawStdout += chunk.toString();
+          });
+          proc.on('close', (code: number | null, signal: string | null) => {
+            exitCode = code;
+            exitSignal = signal;
+          });
+        }
+      };
+
       const client = new Client({ name: 'murph', version: '0.1.0' }, { capabilities: {} });
-      await client.connect(transport);
+      try {
+        await client.connect(transport);
+      } catch (err) {
+        // Wait for stderr to drain — the pipe may not have flushed yet
+        if (stderrStream && !stderrEnded) {
+          await new Promise<void>((resolve) => {
+            const readable = stderrStream as import('node:stream').Readable;
+            readable.on('end', resolve);
+            setTimeout(resolve, 500);
+          });
+        }
+
+        // Always log diagnostic context on failure
+        const diag: Record<string, unknown> = {
+          server: config.name,
+          command: config.command,
+          args: config.args ?? [],
+          stdout: rawStdout.trim() || '(empty)',
+          stderr: stderrOutput.trim() || '(empty)',
+        };
+        if (exitCode !== null) diag.exitCode = exitCode;
+        if (exitSignal) diag.exitSignal = exitSignal;
+        // Filter out JSON parse errors — redundant once we have raw stdout
+        const nonParseErrors = transportErrors.filter(
+          (msg) => !/JSON/.test(msg) && !/parse/i.test(msg),
+        );
+        if (nonParseErrors.length > 0) diag.transportErrors = nonParseErrors;
+
+        logger.error(diag, 'MCP server failed to connect');
+        throw err;
+      }
 
       // Discover tools
       const toolsResult = await client.listTools();
