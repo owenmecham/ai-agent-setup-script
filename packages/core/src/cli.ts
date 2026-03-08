@@ -5,6 +5,13 @@ import { initLogger, createLogger } from './logger.js';
 const logger = createLogger('cli');
 
 async function main() {
+  // Ensure uv tool binaries (~/.local/bin) are reachable even in non-interactive shells
+  const home = process.env.HOME ?? '';
+  const localBin = `${home}/.local/bin`;
+  if (home && !process.env.PATH?.includes(localBin)) {
+    process.env.PATH = `${localBin}:${process.env.PATH ?? ''}`;
+  }
+
   const args = process.argv.slice(2);
   const command = args[0];
 
