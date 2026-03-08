@@ -373,6 +373,44 @@ async function main() {
         logger.warn({ err }, 'Failed to start Scheduler — running without scheduler');
       }
 
+      // Register system.update action
+      agent.getRegistry().register({
+        name: 'system.update',
+        description: 'Update Murph: pulls latest code, installs dependencies, builds, runs migrations, and restarts the agent via LaunchAgent. Use this to apply updates.',
+        execute: async (_params) => {
+          try {
+            const { execSync } = await import('node:child_process');
+            const cwd = process.cwd();
+
+            const runStep = (cmd: string, label: string) => {
+              logger.info({ cmd }, `system.update: ${label}`);
+              execSync(cmd, { cwd, stdio: 'pipe', timeout: 300000 });
+            };
+
+            runStep('git pull --ff-only', 'Pulling latest code');
+            runStep('pnpm install', 'Installing dependencies');
+            runStep('pnpm build', 'Building');
+            runStep('pnpm run migrate', 'Running migrations');
+
+            // Restart via LaunchAgent (KeepAlive will bring us back with new code)
+            logger.info('system.update: Restarting agent via launchctl stop');
+            try {
+              execSync('launchctl stop com.murph.agent', { stdio: 'pipe', timeout: 10000 });
+            } catch {
+              // If not managed by launchctl, just exit and let nohup or manual restart handle it
+              logger.info('system.update: Not managed by LaunchAgent, exiting for manual restart');
+              process.exit(0);
+            }
+
+            return { actionId: '', success: true, data: { updated: true, message: 'Update applied, agent restarting' } };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error({ err }, 'system.update failed');
+            return { actionId: '', success: false, error: message };
+          }
+        },
+      });
+
       // Hourly cleanup of expired outbound grants (> 24 hours old)
       const grantCleanupPool = getPool(config.database.url);
       const grantCleanupInterval = setInterval(async () => {

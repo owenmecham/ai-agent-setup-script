@@ -7,10 +7,15 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "clean": "turbo clean",
-    "migrate": "tsx scripts/migrate.ts",
+    "migrate": "node --experimental-strip-types scripts/migrate.ts",
     "start": "tsx packages/core/src/index.ts",
     "murph": "tsx packages/core/src/cli.ts",
-    "tui": "tsx packages/tui/src/index.tsx"
+    "tui": "tsx packages/tui/src/index.tsx",
+    "build:release": "pnpm build && bash packages/installer/scripts/build-payload.sh && bash packages/installer/scripts/build-apps.sh"
+  },
+  "dependencies": {
+    "pg": "^8.13.0",
+    "yaml": "^2.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

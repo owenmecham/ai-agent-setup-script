@@ -310,9 +310,10 @@ export class ClaudeBridge {
 
   private callClaude(args: string[], stdin: string): Promise<string> {
     return new Promise((resolve, reject) => {
+      const { CLAUDECODE, CLAUDE_CODE_ENTRYPOINT, ...cleanEnv } = process.env;
       const proc = spawn('claude', args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env },
+        env: cleanEnv,
       });
 
       let stdout = '';
@@ -328,8 +329,8 @@ export class ClaudeBridge {
 
       proc.on('close', (code) => {
         if (code !== 0) {
-          logger.error({ code, stderr }, 'Claude CLI exited with error');
-          reject(new Error(`Claude CLI exited with code ${code}: ${stderr}`));
+          logger.error({ code, stderr, stdout: stdout.slice(0, 2000) }, 'Claude CLI exited with error');
+          reject(new Error(`Claude CLI exited with code ${code}: ${stderr || stdout.slice(0, 500)}`));
         } else {
           // Claude CLI with --output-format json wraps result in a JSON object
           try {
