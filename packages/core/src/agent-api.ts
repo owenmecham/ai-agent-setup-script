@@ -80,6 +80,10 @@ export class AgentAPI {
       await this.handleUpdateConfig(req, res);
     } else if (path === '/audit' && req.method === 'GET') {
       await this.handleAudit(req, res, url);
+    } else if (path === '/email-maintenance/trigger' && req.method === 'POST') {
+      await this.handleEmailMaintenanceTrigger(req, res);
+    } else if (path === '/email-maintenance/runs' && req.method === 'GET') {
+      await this.handleEmailMaintenanceRuns(res, url);
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
@@ -167,6 +171,51 @@ export class AgentAPI {
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Update failed' }));
+    }
+  }
+
+  private async handleEmailMaintenanceTrigger(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const engine = this.agent.getEmailMaintenance();
+    if (!engine) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Email maintenance engine not initialized' }));
+      return;
+    }
+
+    const body = await readBody(req);
+    const dryRun = (body.dry_run as boolean) ?? false;
+    const config = this.agent.getConfig();
+
+    const { randomUUID } = await import('node:crypto');
+    const runId = randomUUID();
+
+    // Start run async
+    engine.run(config.email_maintenance, dryRun, runId).catch((err) => {
+      logger.error({ err, runId }, 'Email maintenance triggered run failed');
+    });
+
+    res.writeHead(202, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ runId, status: 'started' }));
+  }
+
+  private async handleEmailMaintenanceRuns(res: ServerResponse, url: URL): Promise<void> {
+    const engine = this.agent.getEmailMaintenance();
+    if (!engine) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ runs: [], total: 0 }));
+      return;
+    }
+
+    const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '10'), 100);
+    const offset = parseInt(url.searchParams.get('offset') ?? '0');
+
+    try {
+      const result = await engine.getRunHistory(limit, offset);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ runs: [], total: 0 }));
     }
   }
 

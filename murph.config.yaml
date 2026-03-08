@@ -40,6 +40,13 @@ security:
     profile.update: auto
     knowledge.ingest: auto
     knowledge.delete: require
+    email-maintenance.run: auto
+    email-maintenance.mark_read: notify
+    email-maintenance.archive: notify
+    email-maintenance.apply_label: auto
+    email-maintenance.create_task: notify
+    email-maintenance.reply: require
+    email-maintenance.forward: notify
 
 channels:
   imessage:
@@ -95,6 +102,35 @@ creator:
 
 scheduler:
   enabled: true
+
+email_maintenance:
+  enabled: false
+  goal: ""
+  model: "haiku"
+  cadence: "1h"
+  next_steps: ""
+  gmail_query: ""
+  lookback_window: "24h"
+  max_emails_per_run: 50
+  only_unread: true
+  scan_labels: []
+  snippet_length: 1000
+  mark_read: false
+  archive: false
+  apply_label: ""
+  auto_tasking: false
+  task_list: "@default"
+  reply_enabled: false
+  reply_mode: "draft"
+  forward_to: ""
+  calendar_aware: false
+  max_budget_per_run_usd: 0.25
+  batch_size: 20
+  run_window_start: ""
+  run_window_end: ""
+  notify_channel: "dashboard"
+  notify_on: "matches_only"
+  privacy_keywords: []
 
 acknowledgment:
   enabled: true

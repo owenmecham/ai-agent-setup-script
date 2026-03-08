@@ -373,6 +373,49 @@ async function main() {
         logger.warn({ err }, 'Failed to start Scheduler — running without scheduler');
       }
 
+      // Wire up email maintenance engine
+      let emailMaintenanceEngine: import('./email-maintenance.js').EmailMaintenanceEngine | null = null;
+      if (config.email_maintenance.enabled && mcpManager) {
+        try {
+          const { EmailMaintenanceEngine } = await import('./email-maintenance.js');
+          const emPool = getPool(config.database.url);
+          emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager, emPool, config.agent.timezone);
+          emailMaintenanceEngine.startCron(config.email_maintenance);
+          agent.setEmailMaintenance(emailMaintenanceEngine);
+          logger.info('Email maintenance engine started');
+        } catch (err) {
+          logger.warn({ err }, 'Failed to start email maintenance engine');
+        }
+      } else if (!config.email_maintenance.enabled) {
+        logger.info('Email maintenance disabled by config');
+      }
+
+      // Listen for config changes on email_maintenance paths
+      if (configManager) {
+        configManager.on('config:changed', (event: import('@murph/config').ConfigChangeEvent) => {
+          for (const path of event.changedPaths) {
+            if (path.startsWith('email_maintenance')) {
+              if (emailMaintenanceEngine) {
+                emailMaintenanceEngine.reconfigure(event.current.email_maintenance);
+                logger.info('Email maintenance engine reconfigured');
+              } else if (event.current.email_maintenance.enabled && mcpManager) {
+                // Engine wasn't created before, create now
+                import('./email-maintenance.js').then(({ EmailMaintenanceEngine }) => {
+                  const emPool = getPool(config.database.url);
+                  emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager!, emPool, event.current.agent.timezone);
+                  emailMaintenanceEngine.startCron(event.current.email_maintenance);
+                  agent.setEmailMaintenance(emailMaintenanceEngine);
+                  logger.info('Email maintenance engine started after config change');
+                }).catch(err => {
+                  logger.error({ err }, 'Failed to start email maintenance engine after config change');
+                });
+              }
+              break;
+            }
+          }
+        });
+      }
+
       // Hourly cleanup of expired outbound grants (> 24 hours old)
       const grantCleanupPool = getPool(config.database.url);
       const grantCleanupInterval = setInterval(async () => {
@@ -426,6 +469,10 @@ async function main() {
         if (dashboardProc.pid && !dashboardProc.killed) {
           dashboardProc.kill();
           logger.info('Dashboard stopped');
+        }
+        if (emailMaintenanceEngine) {
+          emailMaintenanceEngine.stopCron();
+          logger.info('Email maintenance engine stopped');
         }
         if (scheduler) {
           await scheduler.stop();

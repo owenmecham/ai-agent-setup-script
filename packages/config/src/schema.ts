@@ -94,6 +94,13 @@ export const MurphConfigSchema = z.object({
       'gohighlevel.*': 'notify',
       'knowledge.ingest': 'auto',
       'knowledge.delete': 'require',
+      'email-maintenance.run': 'auto',
+      'email-maintenance.mark_read': 'notify',
+      'email-maintenance.archive': 'notify',
+      'email-maintenance.apply_label': 'auto',
+      'email-maintenance.create_task': 'notify',
+      'email-maintenance.reply': 'require',
+      'email-maintenance.forward': 'notify',
     }),
   }),
   channels: z.object({
@@ -142,6 +149,47 @@ export const MurphConfigSchema = z.object({
   }).default({}),
   scheduler: z.object({
     enabled: z.boolean().default(true),
+  }).default({}),
+  email_maintenance: z.object({
+    enabled: z.boolean().default(false),
+
+    // Core
+    goal: z.string().default(''),
+    model: z.enum(['haiku', 'sonnet', 'opus']).default('haiku'),
+    cadence: z.enum(['15m', '30m', '1h', '6h', 'daily']).default('1h'),
+    next_steps: z.string().default(''),
+
+    // Email Scanning
+    gmail_query: z.string().default(''),
+    lookback_window: z.enum(['1h', '6h', '24h', '3d', '7d']).default('24h'),
+    max_emails_per_run: z.number().min(1).max(200).default(50),
+    only_unread: z.boolean().default(true),
+    scan_labels: z.array(z.string()).default([]),
+    snippet_length: z.number().min(100).max(5000).default(1000),
+
+    // Write Permissions
+    mark_read: z.boolean().default(false),
+    archive: z.boolean().default(false),
+    apply_label: z.string().default(''),
+    auto_tasking: z.boolean().default(false),
+    task_list: z.string().default('@default'),
+    reply_enabled: z.boolean().default(false),
+    reply_mode: z.enum(['draft', 'send']).default('draft'),
+    forward_to: z.string().default(''),
+    calendar_aware: z.boolean().default(false),
+
+    // Cost & Performance
+    max_budget_per_run_usd: z.number().default(0.25),
+    batch_size: z.number().min(1).max(50).default(20),
+    run_window_start: z.string().default(''),
+    run_window_end: z.string().default(''),
+
+    // Notifications
+    notify_channel: z.enum(['dashboard', 'imessage', 'telegram', 'none']).default('dashboard'),
+    notify_on: z.enum(['always', 'matches_only', 'errors_only']).default('matches_only'),
+
+    // Privacy
+    privacy_keywords: z.array(z.string()).default([]),
   }).default({}),
   acknowledgment: z.object({
     enabled: z.boolean().default(true),

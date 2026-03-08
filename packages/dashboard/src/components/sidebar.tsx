@@ -14,6 +14,7 @@ const navItems = [
   { href: '/knowledge', label: 'Knowledge', icon: '📚' },
   { href: '/memory', label: 'Memory', icon: '🧠' },
   { href: '/scheduler', label: 'Scheduler', icon: '⏰' },
+  { href: '/email-maintenance', label: 'Email Maint.', icon: '📧' },
   { href: '/integrations', label: 'Integrations', icon: '🔌' },
   { href: '/audit', label: 'Audit Log', icon: '📋' },
   { href: '/secrets', label: 'Secrets', icon: '🔐' },

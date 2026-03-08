@@ -8,6 +8,7 @@ import { AgentAPI } from './agent-api.js';
 import { createLogger } from './logger.js';
 import { getUserProfile } from './profile-db.js';
 import type { ConfigManager, ConfigChangeEvent } from '@murph/config';
+import type { EmailMaintenanceEngine } from './email-maintenance.js';
 
 const logger = createLogger('agent');
 
@@ -40,6 +41,7 @@ export class Agent {
   private config: MurphConfig;
   private configManager: ConfigManager | null = null;
   private agentAPI: AgentAPI | null = null;
+  private emailMaintenance: EmailMaintenanceEngine | null = null;
 
   constructor(config: MurphConfig, configManager?: ConfigManager) {
     this.config = config;
@@ -120,6 +122,14 @@ export class Agent {
 
   getAuditLogger(): AuditLogger {
     return this.auditLogger;
+  }
+
+  getEmailMaintenance(): EmailMaintenanceEngine | null {
+    return this.emailMaintenance;
+  }
+
+  setEmailMaintenance(engine: EmailMaintenanceEngine): void {
+    this.emailMaintenance = engine;
   }
 
   setMemory(memory: MemoryInterface): void {
