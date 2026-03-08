@@ -292,6 +292,16 @@ else
   ok
 fi
 
+# 7b. uv (Python package manager — needed for Plaud MCP)
+check "uv (Python package manager)"
+if command -v uv &>/dev/null; then
+  skip
+else
+  installing
+  brew install uv
+  ok
+fi
+
 # 8. PostgreSQL + pgvector
 check "PostgreSQL 16"
 if brew list postgresql@16 &>/dev/null; then
@@ -463,6 +473,25 @@ else
   ok
 fi
 
+# 11b. Obsidian
+check "Obsidian"
+if [ -d "/Applications/Obsidian.app" ]; then
+  skip
+else
+  installing
+  brew install --cask obsidian
+  ok
+fi
+
+# 11c. Plaud Desktop
+check "Plaud Desktop"
+if [ -d "/Applications/PLAUD.app" ]; then
+  skip
+else
+  echo -e "${YELLOW}MANUAL STEP${NC}"
+  echo "  Download from: https://global.plaud.ai/pages/app-download"
+fi
+
 # 12. Wrangler (Cloudflare)
 check "Wrangler CLI"
 if command -v wrangler &>/dev/null; then
@@ -488,6 +517,20 @@ check "Playwright Chromium"
 installing
 pnpm dlx playwright@latest install chromium
 ok
+
+# 14. Plaud MCP server (optional — requires Plaud Desktop)
+check "Plaud MCP server"
+if command -v plaud-mcp &>/dev/null; then
+  skip
+else
+  if [ -d "/Applications/PLAUD.app" ]; then
+    installing
+    uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"
+    ok
+  else
+    echo -e "${YELLOW}Skipped${NC} (Plaud Desktop not installed)"
+  fi
+fi
 
 echo ""
 echo "======================================"
@@ -622,10 +665,14 @@ echo "  4. Google Workspace setup (optional — run when ready):"
 echo "     pnpm murph google-auth"
 echo "     (Walks through Google Cloud project setup + browser OAuth)"
 echo ""
-echo "  5. Run diagnostics:"
+echo "  5. Plaud Desktop (if needed):"
+echo "     Download from https://global.plaud.ai/pages/app-download"
+echo "     Sign in, then run: pnpm murph setup-plaud"
+echo ""
+echo "  6. Run diagnostics:"
 echo "     pnpm murph doctor"
 echo ""
-echo "  6. Start Murph:"
+echo "  7. Start Murph:"
 echo "     cd $INSTALL_DIR && pnpm murph start"
 echo "     pnpm --filter=@murph/dashboard start"
 echo "     Dashboard: http://localhost:3141"

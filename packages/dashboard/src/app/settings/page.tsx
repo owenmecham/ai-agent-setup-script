@@ -57,6 +57,21 @@ export default function SettingsPage() {
   });
 
   const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
+  const [plaudInstallLoading, setPlaudInstallLoading] = useState(false);
+
+  const { data: plaudStatus, refetch: refetchPlaud } = useQuery({
+    queryKey: ['plaud-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/plaud-status');
+      return res.json() as Promise<{
+        desktopInstalled: boolean;
+        mcpInstalled: boolean;
+        uvInstalled: boolean;
+        connected: boolean;
+      }>;
+    },
+    refetchInterval: 30000,
+  });
 
   const { data: googleStatus, refetch: refetchGoogle } = useQuery({
     queryKey: ['google-auth'],
@@ -289,6 +304,91 @@ export default function SettingsPage() {
               )}
               <p className="text-xs text-zinc-600">
                 Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold mb-4">Plaud</h3>
+          <p className="text-sm text-zinc-500 mb-4">
+            Connect Plaud Desktop to access recordings and transcripts via the Plaud MCP server.
+          </p>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-2 h-2 rounded-full ${
+              plaudStatus?.mcpInstalled && plaudStatus?.connected ? 'bg-green-500' :
+              plaudStatus?.mcpInstalled ? 'bg-yellow-500' :
+              'bg-zinc-600'
+            }`} />
+            <span className="text-sm">
+              {plaudStatus?.mcpInstalled && plaudStatus?.connected
+                ? 'Connected'
+                : plaudStatus?.mcpInstalled
+                  ? 'MCP installed — Plaud Desktop not running'
+                  : plaudStatus?.desktopInstalled
+                    ? 'Plaud Desktop installed — MCP server not installed'
+                    : 'Not installed'}
+            </span>
+          </div>
+
+          {plaudStatus?.mcpInstalled && plaudStatus?.connected ? (
+            <div className="space-y-3">
+              <div className="text-sm text-zinc-400">
+                <p className="font-medium text-zinc-300 mb-2">Available via MCP:</p>
+                <ul className="list-disc list-inside space-y-1 text-zinc-500">
+                  <li>Browse recordings and transcripts</li>
+                  <li>Search transcript content</li>
+                  <li>Get AI-generated summaries</li>
+                </ul>
+              </div>
+              <button
+                onClick={() => refetchPlaud()}
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Check Connection
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {!plaudStatus?.desktopInstalled && (
+                <p className="text-sm text-zinc-500">
+                  1. Install Plaud Desktop:{' '}
+                  <a
+                    href="https://global.plaud.ai/pages/app-download"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    Download
+                  </a>
+                </p>
+              )}
+              {plaudStatus?.desktopInstalled && !plaudStatus?.mcpInstalled && (
+                <button
+                  onClick={async () => {
+                    setPlaudInstallLoading(true);
+                    try {
+                      await fetch('/api/plaud-status', { method: 'POST' });
+                      await refetchPlaud();
+                    } finally {
+                      setPlaudInstallLoading(false);
+                    }
+                  }}
+                  disabled={plaudInstallLoading || !plaudStatus?.uvInstalled}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
+                >
+                  {plaudInstallLoading ? 'Installing...' : 'Install Plaud MCP'}
+                </button>
+              )}
+              {plaudStatus?.desktopInstalled && !plaudStatus?.uvInstalled && (
+                <p className="text-sm text-zinc-500">
+                  uv required:{' '}
+                  <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">brew install uv</code>
+                </p>
+              )}
+              <p className="text-xs text-zinc-600">
+                Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph setup-plaud</code>
               </p>
             </div>
           )}

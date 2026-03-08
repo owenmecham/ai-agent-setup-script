@@ -267,7 +267,102 @@ export async function runDoctor(): Promise<DoctorResult> {
     });
   }
 
-  // 7. Log file — verify writable
+  // 7. Obsidian
+  try {
+    const { existsSync } = await import('node:fs');
+    if (existsSync('/Applications/Obsidian.app')) {
+      checks.push({ name: 'Obsidian', status: 'pass', message: 'Installed' });
+
+      // Check if vault_path is configured when knowledge source is enabled
+      try {
+        const { loadConfig } = await import('./config.js');
+        const config = loadConfig();
+        const obsidianConfig = (config as any).knowledge?.sources?.obsidian;
+        if (obsidianConfig?.enabled && !obsidianConfig?.vault_path) {
+          checks.push({
+            name: 'Obsidian vault',
+            status: 'warn',
+            message: 'Obsidian knowledge source is enabled but vault_path is not set',
+            fix: 'Set knowledge.sources.obsidian.vault_path in murph.config.yaml',
+          });
+        } else if (obsidianConfig?.enabled && obsidianConfig?.vault_path) {
+          const vaultPath = obsidianConfig.vault_path.replace(/^~/, process.env.HOME ?? '');
+          if (existsSync(vaultPath)) {
+            checks.push({ name: 'Obsidian vault', status: 'pass', message: `Vault: ${vaultPath}` });
+          } else {
+            checks.push({
+              name: 'Obsidian vault',
+              status: 'warn',
+              message: `Vault path does not exist: ${vaultPath}`,
+              fix: 'Update knowledge.sources.obsidian.vault_path in murph.config.yaml',
+            });
+          }
+        }
+      } catch {
+        // Config loading failed — skip vault check
+      }
+    } else {
+      checks.push({
+        name: 'Obsidian',
+        status: 'warn',
+        message: 'Not installed',
+        fix: 'Install: brew install --cask obsidian',
+      });
+    }
+  } catch {
+    // Skip if fs import fails
+  }
+
+  // 8. Plaud Desktop
+  try {
+    const { existsSync } = await import('node:fs');
+    if (existsSync('/Applications/PLAUD.app')) {
+      checks.push({ name: 'Plaud Desktop', status: 'pass', message: 'Installed' });
+    } else {
+      checks.push({
+        name: 'Plaud Desktop',
+        status: 'warn',
+        message: 'Not installed (optional)',
+        fix: 'Download from: https://global.plaud.ai/pages/app-download',
+      });
+    }
+  } catch {
+    // Skip
+  }
+
+  // 9. Plaud MCP
+  const plaudMcpResult = await spawnCheck('plaud-mcp', ['--help']);
+  if (plaudMcpResult.code === 0) {
+    checks.push({ name: 'Plaud MCP', status: 'pass', message: 'Installed' });
+  } else {
+    try {
+      const { existsSync } = await import('node:fs');
+      if (existsSync('/Applications/PLAUD.app')) {
+        checks.push({
+          name: 'Plaud MCP',
+          status: 'warn',
+          message: 'Not installed (Plaud Desktop is present)',
+          fix: 'Run: pnpm murph setup-plaud',
+        });
+      } else {
+        checks.push({
+          name: 'Plaud MCP',
+          status: 'warn',
+          message: 'Not installed (install Plaud Desktop first)',
+          fix: 'Download Plaud Desktop from https://global.plaud.ai/pages/app-download, then run: pnpm murph setup-plaud',
+        });
+      }
+    } catch {
+      checks.push({
+        name: 'Plaud MCP',
+        status: 'warn',
+        message: 'Not installed',
+        fix: 'Run: pnpm murph setup-plaud',
+      });
+    }
+  }
+
+  // 10. Log file — verify writable
   try {
     const { loadConfig } = await import('./config.js');
     const config = loadConfig();

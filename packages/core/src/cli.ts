@@ -536,6 +536,96 @@ async function main() {
       break;
     }
 
+    case 'setup-plaud': {
+      const { execSync } = await import('node:child_process');
+      const { existsSync } = await import('node:fs');
+      const { readFileSync, writeFileSync } = await import('node:fs');
+      const { join: pathJoin } = await import('node:path');
+
+      console.log('Plaud MCP Setup');
+      console.log('─'.repeat(40));
+      console.log('');
+
+      // 1. Check Plaud Desktop
+      if (!existsSync('/Applications/PLAUD.app')) {
+        console.error('✗ Plaud Desktop is not installed.');
+        console.error('  Download from: https://global.plaud.ai/pages/app-download');
+        console.error('  Install and sign in, then re-run this command.');
+        process.exit(1);
+      }
+      console.log('✓ Plaud Desktop is installed');
+
+      // 2. Check uv
+      try {
+        execSync('which uv', { stdio: 'ignore' });
+        console.log('✓ uv is installed');
+      } catch {
+        console.log('Installing uv...');
+        try {
+          execSync('brew install uv', { stdio: 'inherit' });
+          console.log('✓ uv installed');
+        } catch {
+          console.error('✗ Failed to install uv. Try manually: brew install uv');
+          process.exit(1);
+        }
+      }
+
+      // 3. Install Plaud MCP
+      try {
+        execSync('which plaud-mcp', { stdio: 'ignore' });
+        console.log('✓ plaud-mcp is already installed');
+      } catch {
+        console.log('Installing Plaud MCP server...');
+        try {
+          execSync('uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"', {
+            stdio: 'inherit',
+          });
+          console.log('✓ plaud-mcp installed');
+        } catch {
+          console.error('✗ Failed to install plaud-mcp.');
+          console.error('  Try manually: uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"');
+          process.exit(1);
+        }
+      }
+
+      // 4. Check if Plaud MCP server is in config
+      const configPath = pathJoin(process.cwd(), 'murph.config.yaml');
+      if (existsSync(configPath)) {
+        const configContent = readFileSync(configPath, 'utf-8');
+        if (!configContent.includes('name: "plaud"')) {
+          console.log('');
+          console.log('Adding Plaud MCP server to murph.config.yaml...');
+          const plaudEntry = '\n  - name: "plaud"\n    transport: "stdio"\n    command: "plaud-mcp"\n';
+          const updated = configContent.replace(
+            /(mcp_servers:.*(?:\n  - .*)*)/,
+            `$1${plaudEntry}`,
+          );
+          writeFileSync(configPath, updated, 'utf-8');
+          console.log('✓ Plaud MCP server added to config');
+        } else {
+          console.log('✓ Plaud MCP server already in config');
+        }
+      }
+
+      // 5. Verify connection
+      console.log('');
+      console.log('Verifying Plaud Desktop connection...');
+      try {
+        const result = execSync('plaud-mcp --help 2>&1', {
+          timeout: 10000,
+          encoding: 'utf-8',
+        });
+        console.log('✓ plaud-mcp is functional');
+      } catch {
+        console.log('! Could not verify plaud-mcp. Ensure Plaud Desktop is running and signed in.');
+      }
+
+      console.log('');
+      console.log('Plaud MCP setup complete.');
+      console.log('Restart Murph to activate: pnpm murph start');
+      break;
+    }
+
     case 'doctor': {
       const { runDoctor, printDoctorResult } = await import('./doctor.js');
       const result = await runDoctor();
@@ -566,6 +656,7 @@ async function main() {
       console.log('  tui                Launch terminal UI');
       console.log('  doctor             Run system diagnostics');
       console.log('  google-auth        Set up Google Workspace (OAuth)');
+      console.log('  setup-plaud        Set up Plaud MCP server');
       console.log('  secret set <n> <v> Store a secret');
       console.log('  secret list        List all secrets');
       console.log('  secret delete <n>  Delete a secret');

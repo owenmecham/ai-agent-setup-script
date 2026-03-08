@@ -43,6 +43,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - `pnpm murph start` — Start the agent
 - `pnpm murph doctor` — Run system diagnostics
 - `pnpm murph google-auth` — Set up Google Workspace OAuth (interactive)
+- `pnpm murph setup-plaud` — Set up Plaud MCP server (installs uv + plaud-mcp, verifies connection)
 - `pnpm murph secret set/list/delete` — Manage secrets
 - `pnpm run migrate` — Run database migrations
 
@@ -96,6 +97,23 @@ Google Workspace (Gmail, Calendar, Tasks, Drive) is integrated via the official 
 - `mcp.google.drive.files.delete` → `require`
 - `mcp.google.drive.files.create` → `notify`
 - All other Google MCP actions → `auto` (inherited from `mcp.*`)
+
+## Plaud Integration
+
+Plaud recordings and transcripts are accessible via the `plaud-mcp` MCP server, which proxies through the running Plaud Desktop app.
+
+**Requirements:**
+- Plaud Desktop installed and signed in (download from https://global.plaud.ai/pages/app-download)
+- `uv` Python package manager (installed via `brew install uv`)
+- `plaud-mcp` server (installed via `uv tool install plaud-mcp --from "git+https://github.com/davidlinjiahao/plaud-mcp"`)
+
+**Setup:** `pnpm murph setup-plaud` — installs dependencies, configures the MCP server, and verifies the connection. Can also be triggered from the dashboard Settings page.
+
+**How it works:**
+- The `plaud-mcp` command runs as an MCP server (stdio transport) alongside the agent
+- It communicates with the locally running Plaud Desktop app to access recordings
+- Available tools: browse recordings, get transcripts, search transcript content, get AI summaries
+- If Plaud Desktop is not running or not installed, the MCP client logs a connection error and continues
 
 ## Security Model
 

@@ -72,6 +72,9 @@ mcp_servers:
     transport: "stdio"
     command: "gws"
     args: ["mcp"]
+  - name: "plaud"
+    transport: "stdio"
+    command: "plaud-mcp"
 
 integrations:
   bop:
