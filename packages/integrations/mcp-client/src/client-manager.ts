@@ -63,6 +63,7 @@ export class McpClientManager {
       // event before the SDK nulls _process (stdio.js:83-84)
       let exitCode: number | null = null;
       let exitSignal: string | null = null;
+      let rawStdout = '';
       const originalStart = transport.start.bind(transport);
       transport.start = async function () {
         await originalStart();
@@ -70,6 +71,9 @@ export class McpClientManager {
           | import('node:child_process').ChildProcess
           | undefined;
         if (proc) {
+          proc.stdout?.on('data', (chunk: Buffer) => {
+            rawStdout += chunk.toString();
+          });
           proc.on('close', (code: number | null, signal: string | null) => {
             exitCode = code;
             exitSignal = signal;
@@ -95,11 +99,16 @@ export class McpClientManager {
           server: config.name,
           command: config.command,
           args: config.args ?? [],
+          stdout: rawStdout.trim() || '(empty)',
           stderr: stderrOutput.trim() || '(empty)',
         };
         if (exitCode !== null) diag.exitCode = exitCode;
         if (exitSignal) diag.exitSignal = exitSignal;
-        if (transportErrors.length > 0) diag.transportErrors = transportErrors;
+        // Filter out JSON parse errors — redundant once we have raw stdout
+        const nonParseErrors = transportErrors.filter(
+          (msg) => !/JSON/.test(msg) && !/parse/i.test(msg),
+        );
+        if (nonParseErrors.length > 0) diag.transportErrors = nonParseErrors;
 
         logger.error(diag, 'MCP server failed to connect');
         throw err;

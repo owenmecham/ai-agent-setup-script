@@ -590,8 +590,12 @@ async function main() {
         console.log('The Google MCP server is configured in murph.config.yaml.');
         console.log('Restart Murph to activate: pnpm murph start');
       } else {
+        const stdout = verifyResult.stdout?.toString().trim();
+        const stderr = verifyResult.stderr?.toString().trim();
         console.error('');
         console.error('✗ Authentication verification failed.');
+        if (stdout) console.error('  stdout:', stdout);
+        if (stderr) console.error('  stderr:', stderr);
         console.error('  The OAuth flow may not have completed. Try again:');
         console.error('  pnpm murph google-auth');
         process.exit(1);
