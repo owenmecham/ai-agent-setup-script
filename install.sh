@@ -457,6 +457,20 @@ else
   ok
 fi
 
+# 10a. Google Cloud SDK (required by gws CLI)
+check "Google Cloud SDK (gcloud)"
+if command -v gcloud &>/dev/null; then
+  skip
+else
+  installing
+  brew install --cask google-cloud-sdk
+  # Source gcloud shell integration for the current session
+  if [ -f "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc" ]; then
+    source "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc"
+  fi
+  ok
+fi
+
 # 10b. Google Workspace CLI (auth deferred to `pnpm murph google-auth`)
 check "Google Workspace CLI"
 if command -v gws &>/dev/null; then
