@@ -35,10 +35,28 @@ export class McpClientManager {
       const transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
+        env: process.env as Record<string, string>,
+        stderr: 'pipe',
       });
 
+      // Capture stderr for diagnostics
+      let stderrOutput = '';
+      const stderrStream = transport.stderr;
+      if (stderrStream && 'on' in stderrStream) {
+        (stderrStream as import('node:stream').Readable).on('data', (chunk: Buffer) => {
+          stderrOutput += chunk.toString();
+        });
+      }
+
       const client = new Client({ name: 'murph', version: '0.1.0' }, { capabilities: {} });
-      await client.connect(transport);
+      try {
+        await client.connect(transport);
+      } catch (err) {
+        if (stderrOutput) {
+          logger.error({ name: config.name, stderr: stderrOutput.trim() }, 'MCP server stderr output');
+        }
+        throw err;
+      }
 
       // Discover tools
       const toolsResult = await client.listTools();
