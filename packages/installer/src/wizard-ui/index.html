@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Murph Installer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Screen 1: Welcome -->
+    <div id="screen-welcome" class="screen active">
+      <div class="logo">M</div>
+      <h1>Welcome to Murph</h1>
+      <p class="subtitle">Your personal AI agent framework</p>
+      <p class="description">
+        This wizard will install and configure Murph on your Mac.
+        It will set up all required dependencies, build the project, and configure
+        automatic startup.
+      </p>
+      <button class="btn primary" onclick="showScreen('prerequisites')">Get Started</button>
+    </div>
+
+    <!-- Screen 2: Prerequisites -->
+    <div id="screen-prerequisites" class="screen">
+      <h2>Prerequisites</h2>
+      <p class="description">Before we begin, please confirm the following:</p>
+      <div class="checklist">
+        <label class="check-item">
+          <input type="checkbox" id="prereq-apple-id">
+          <span>A dedicated Apple ID has been created for this machine</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="prereq-signed-in">
+          <span>This Mac is signed into that Apple ID (System Settings > Apple ID)</span>
+        </label>
+        <label class="check-item">
+          <input type="checkbox" id="prereq-imessage">
+          <span>iMessage is signed in and active (Messages.app > Settings > iMessage)</span>
+        </label>
+      </div>
+
+      <div class="permission-card" style="margin-top: 1.5rem;">
+        <h3>Full Disk Access</h3>
+        <p>Murph needs Full Disk Access to read the iMessage database. Please grant it before continuing.</p>
+        <ol>
+          <li>Click <strong>Open Settings</strong> below</li>
+          <li>Click the <strong>+</strong> button and add both your terminal app (e.g. <strong>Terminal.app</strong>) and the <strong>node</strong> binary (press <kbd>⌘</kbd><kbd>Shift</kbd><kbd>G</kbd> and type the path from <code>which node</code>)</li>
+          <li>Toggle the switches <strong>ON</strong></li>
+          <li>Click <strong>Verify</strong> to confirm access</li>
+        </ol>
+        <div class="btn-row" style="justify-content: flex-start; gap: 0.5rem;">
+          <button class="btn small" onclick="openFdaSettings()">Open Settings</button>
+          <button class="btn small" onclick="checkFda()">Verify</button>
+          <span id="fda-status" class="perm-status"></span>
+        </div>
+      </div>
+
+      <div class="permission-card">
+        <h3>Accessibility</h3>
+        <p>Murph needs Accessibility access to send iMessages via AppleScript.</p>
+        <ol>
+          <li>Click <strong>Open Settings</strong> below</li>
+          <li>Click the <strong>+</strong> button and add your terminal app (e.g. <strong>Terminal.app</strong>)</li>
+          <li>Toggle the switch <strong>ON</strong></li>
+          <li>Click <strong>Verify</strong> to confirm access</li>
+        </ol>
+        <div class="btn-row" style="justify-content: flex-start; gap: 0.5rem;">
+          <button class="btn small" onclick="openAccessibilitySettings()">Open Settings</button>
+          <button class="btn small" onclick="checkAccessibility()">Verify</button>
+          <span id="accessibility-status" class="perm-status"></span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn secondary" onclick="showScreen('welcome')">Back</button>
+        <button class="btn primary" id="btn-prereq-continue" onclick="showScreen('install')" disabled>Continue</button>
+      </div>
+    </div>
+
+    <!-- Screen 3: Installation -->
+    <div id="screen-install" class="screen">
+      <h2>Installation</h2>
+      <div id="steps-list" class="steps-list"></div>
+      <div class="log-container">
+        <div class="log-header">
+          <span>Installation Log</span>
+          <button class="btn-icon" onclick="toggleLog()" title="Toggle log">
+            <span id="log-toggle-icon">&#9660;</span>
+          </button>
+        </div>
+        <div id="log-output" class="log-output"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="showScreen('prerequisites')">Back</button>
+        <button class="btn primary" id="btn-install" onclick="runAllSteps()">Install Everything</button>
+        <button class="btn primary" id="btn-to-verify" onclick="showScreen('verify')" style="display:none">Continue</button>
+      </div>
+    </div>
+
+
+    <!-- Screen 5: Verification -->
+    <div id="screen-verify" class="screen">
+      <h2>Verification</h2>
+      <p class="description">Running final health checks...</p>
+      <div id="verify-results" class="verify-results"></div>
+      <div class="btn-row">
+        <button class="btn secondary" onclick="showScreen('install')">Back</button>
+        <button class="btn primary" id="btn-verify" onclick="runVerification()">Run Checks</button>
+        <button class="btn primary" id="btn-to-launch" onclick="showScreen('launch')" style="display:none">Continue</button>
+      </div>
+    </div>
+
+    <!-- Screen 6: Launch -->
+    <div id="screen-launch" class="screen">
+      <div class="logo success">M</div>
+      <h2>Murph is Ready!</h2>
+      <p class="description">
+        Your AI agent is configured and ready to go.
+        Click the button below to start Murph and open the dashboard.
+      </p>
+      <div class="launch-info">
+        <div class="info-row"><span>Dashboard</span><span>http://localhost:3141</span></div>
+        <div class="info-row"><span>Agent API</span><span>http://localhost:3140</span></div>
+        <div class="info-row"><span>Auto-restart</span><span>Enabled (LaunchAgent)</span></div>
+      </div>
+      <button class="btn primary large" onclick="launchMurph()">Launch Murph</button>
+    </div>
+  </div>
+
+  <script src="wizard.js"></script>
+</body>
+</html>

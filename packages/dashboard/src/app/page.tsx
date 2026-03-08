@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 interface Stats {
@@ -47,13 +48,29 @@ export default function HomePage() {
     },
   });
 
-  const { data: health } = useQuery({
+  const { data: health, refetch: refetchHealth } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
       const res = await fetch('/api/health');
       return res.json() as Promise<HealthData>;
     },
   });
+
+  const [restarting, setRestarting] = useState(false);
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    try {
+      await fetch('/api/agent/restart', { method: 'POST' });
+      // Wait a few seconds for the agent to restart, then refresh health
+      setTimeout(() => {
+        refetchHealth();
+        setRestarting(false);
+      }, 5000);
+    } catch {
+      setRestarting(false);
+    }
+  };
 
   const getSystemStatus = (name: string): string => {
     if (!health) return 'unknown';
@@ -110,7 +127,16 @@ export default function HomePage() {
         </div>
 
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
-          <h3 className="text-lg font-semibold mb-4">System Status</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">System Status</h3>
+            <button
+              onClick={handleRestart}
+              disabled={restarting}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {restarting ? 'Restarting...' : 'Restart Agent'}
+            </button>
+          </div>
           <div className="space-y-3">
             <StatusRow label="Agent" status={getSystemStatus('Agent')} />
             <StatusRow label="Database" status={getSystemStatus('PostgreSQL')} />

@@ -13,6 +13,13 @@ installing() { echo -e "${YELLOW}Installing...${NC}"; }
 skip() { echo -e "${GREEN}Already installed${NC}"; }
 fail() { echo -e "${RED}FAILED${NC}"; echo "  $1"; }
 
+# Ensure brew runs under native ARM on Apple Silicon (avoids Rosetta 2 conflicts)
+if [ "$(uname -m)" = "arm64" ] || [ -d /opt/homebrew ]; then
+  brew() { arch -arm64 /opt/homebrew/bin/brew "$@"; }
+elif [ -x /usr/local/bin/brew ]; then
+  brew() { /usr/local/bin/brew "$@"; }
+fi
+
 # Parse flags
 UPDATE_ONLY=false
 SKIP_CONFIRM=false
@@ -60,62 +67,79 @@ if [ "$UPDATE_ONLY" = true ]; then
   echo "Running migrations..."
   pnpm run migrate
 
-  # Stop old process and restart
+  # Stop and restart via LaunchAgent
   echo ""
-  check "Stopping Murph"
-  STOPPED=false
-  # Kill by process name
-  if pkill -f "tsx packages/core/src/cli.ts" 2>/dev/null; then
-    STOPPED=true
-  fi
-  # Kill anything still holding port 3140
-  PORT_PIDS="$(lsof -ti :3140 2>/dev/null || true)"
-  if [ -n "$PORT_PIDS" ]; then
-    echo "$PORT_PIDS" | xargs kill 2>/dev/null || true
-    STOPPED=true
-  fi
-  # Kill anything still holding port 3141 (dashboard)
-  DASH_PIDS="$(lsof -ti :3141 2>/dev/null || true)"
-  if [ -n "$DASH_PIDS" ]; then
-    echo "$DASH_PIDS" | xargs kill 2>/dev/null || true
-    STOPPED=true
-  fi
-  # Clean up stale IPC socket
-  rm -f "$HOME/.murph/agent.sock"
-  if [ "$STOPPED" = true ]; then
-    sleep 2
-    ok
+  AGENT_LABEL="com.murph.agent"
+  PLIST="$HOME/Library/LaunchAgents/${AGENT_LABEL}.plist"
+
+  if launchctl list "$AGENT_LABEL" &>/dev/null 2>&1; then
+    # LaunchAgent is loaded — stop it (KeepAlive will restart with new code)
+    check "Restarting Murph via LaunchAgent"
+    launchctl stop "$AGENT_LABEL" 2>/dev/null || true
+    sleep 3
+
+    # Verify it came back
+    if launchctl list "$AGENT_LABEL" &>/dev/null 2>&1; then
+      ok
+    else
+      fail "Agent did not restart. Check: launchctl list $AGENT_LABEL"
+    fi
   else
-    echo -e "${YELLOW}Not running${NC}"
-  fi
+    # LaunchAgent not installed — install it, then start
+    check "Installing LaunchAgent"
+    # Generate plist using the installer module
+    if [ -f "$INSTALL_DIR/packages/installer/dist/launchctl.js" ]; then
+      node -e "
+        import('$INSTALL_DIR/packages/installer/dist/launchctl.js').then(m => {
+          const plist = m.buildAgentPlist('$INSTALL_DIR');
+          m.installAgent(m.AGENT_LABEL, plist);
+        });
+      " 2>/dev/null && ok || {
+        # Fallback: use nohup if installer module is not available
+        echo -e "${YELLOW}LaunchAgent module not available, using nohup fallback${NC}"
+        # Kill any existing processes
+        pkill -f "tsx packages/core/src/cli.ts" 2>/dev/null || true
+        PORT_PIDS="$(lsof -ti :3140 2>/dev/null || true)"
+        [ -n "$PORT_PIDS" ] && echo "$PORT_PIDS" | xargs kill 2>/dev/null || true
+        DASH_PIDS="$(lsof -ti :3141 2>/dev/null || true)"
+        [ -n "$DASH_PIDS" ] && echo "$DASH_PIDS" | xargs kill 2>/dev/null || true
+        rm -f "$HOME/.murph/agent.sock"
+        sleep 2
 
-  check "Starting Murph"
-  nohup pnpm murph start >> "$INSTALL_DIR/murph.log" 2>&1 &
-  sleep 3
+        nohup pnpm murph start >> "$INSTALL_DIR/murph.log" 2>&1 &
+        sleep 3
+        if pgrep -f "tsx packages/core/src/cli.ts" &>/dev/null; then
+          ok
+        else
+          fail "Murph failed to start. Check $INSTALL_DIR/murph.log"
+          exit 1
+        fi
+      }
+    else
+      # Installer module not built — fallback to nohup
+      echo -e "${YELLOW}Using nohup fallback (LaunchAgent module not built)${NC}"
+      pkill -f "tsx packages/core/src/cli.ts" 2>/dev/null || true
+      PORT_PIDS="$(lsof -ti :3140 2>/dev/null || true)"
+      [ -n "$PORT_PIDS" ] && echo "$PORT_PIDS" | xargs kill 2>/dev/null || true
+      DASH_PIDS="$(lsof -ti :3141 2>/dev/null || true)"
+      [ -n "$DASH_PIDS" ] && echo "$DASH_PIDS" | xargs kill 2>/dev/null || true
+      rm -f "$HOME/.murph/agent.sock"
+      sleep 2
 
-  # Quick health check
-  if pgrep -f "tsx packages/core/src/cli.ts" &>/dev/null; then
-    ok
-  else
-    fail "Murph failed to start. Check $INSTALL_DIR/murph.log"
-    exit 1
-  fi
-
-  check "Starting Dashboard"
-  nohup pnpm --filter=@murph/dashboard start >> "$INSTALL_DIR/dashboard.log" 2>&1 &
-  sleep 3
-
-  # Quick health check for dashboard
-  if lsof -ti :3141 &>/dev/null; then
-    ok
-  else
-    fail "Dashboard failed to start. Check $INSTALL_DIR/dashboard.log"
+      nohup pnpm murph start >> "$INSTALL_DIR/murph.log" 2>&1 &
+      sleep 3
+      if pgrep -f "tsx packages/core/src/cli.ts" &>/dev/null; then
+        ok
+      else
+        fail "Murph failed to start. Check $INSTALL_DIR/murph.log"
+        exit 1
+      fi
+    fi
   fi
 
   echo ""
   echo -e "${GREEN}Update complete! Murph is running.${NC}"
-  echo "Logs: $INSTALL_DIR/murph.log"
-  echo "Dashboard logs: $INSTALL_DIR/dashboard.log"
+  echo "Agent logs: ~/.murph/agent.stdout.log"
   echo "Dashboard: http://localhost:3141"
   exit 0
 fi
@@ -738,9 +762,13 @@ echo "  6. Run diagnostics:"
 echo "     pnpm murph doctor"
 echo ""
 echo "  7. Start Murph:"
-echo "     cd $INSTALL_DIR && pnpm murph start"
-echo "     pnpm --filter=@murph/dashboard start"
-echo "     Dashboard: http://localhost:3141"
+echo "     Option A (recommended): Use the install wizard for LaunchAgent setup:"
+echo "       cd $INSTALL_DIR && node packages/installer/dist/server.js"
+echo "       Then open http://localhost:3142 in your browser"
+echo ""
+echo "     Option B (manual):"
+echo "       cd $INSTALL_DIR && pnpm murph start"
+echo "       Dashboard: http://localhost:3141"
 echo ""
 echo "  To update Murph later (code only):"
 echo "     $INSTALL_DIR/install.sh --update"

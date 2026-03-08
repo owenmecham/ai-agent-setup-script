@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Murph Installer - Bootstrap Launcher
+# This is the executable inside "Murph Installer.app"
+# It bootstraps the environment, then starts the web-based install wizard.
+# The .app contains a pre-built payload — no git clone needed.
+
+set -euo pipefail
+
+# Re-exec under native ARM if running under Rosetta on Apple Silicon
+if [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = "1" ] && [ "$(uname -m)" = "x86_64" ]; then
+  exec arch -arm64 "$0" "$@"
+fi
+
+LOGFILE="$HOME/.murph/installer.log"
+INSTALL_DIR="$HOME/murph"
+
+mkdir -p "$HOME/.murph"
+
+exec > >(tee -a "$LOGFILE") 2>&1
+echo "=== Murph Installer started at $(date) ==="
+
+# --- Bootstrap PATH ---
+# .app bundles launch with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
+# We must set up the full PATH before any `command -v` checks.
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/Library/pnpm:$HOME/.local/bin:/opt/homebrew/opt/postgresql@16/bin"
+
+# Add Homebrew shellenv if available
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+
+# Source nvm if available
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  \. "$NVM_DIR/nvm.sh"
+fi
+
+# Add pnpm home
+export PNPM_HOME="$HOME/Library/pnpm"
+mkdir -p "$PNPM_HOME"
+export PATH="$PNPM_HOME:$PATH"
+
+echo "PATH: $PATH"
+
+# --- Helper: show a native macOS dialog ---
+notify() {
+  osascript -e "display notification \"$1\" with title \"Murph Installer\"" 2>/dev/null || true
+}
+
+splash() {
+  osascript -e 'display dialog "Setting up Murph...\n\nThis window will close when the wizard opens in your browser." with icon note buttons {"OK"} giving up after 2 with title "Murph Installer"' 2>/dev/null &
+}
+
+error_dialog() {
+  osascript -e "display alert \"Murph Installer\" message \"$1\" as critical" 2>/dev/null || true
+}
+
+# Show splash
+splash
+
+# --- Resolve the .app bundle location ---
+# The launcher lives at Murph Installer.app/Contents/MacOS/launcher
+# Resources (payload, installer dist) are at Murph Installer.app/Contents/Resources/
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [ -L "$SCRIPT_PATH" ]; then
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+RESOURCES_DIR="$(cd "$SCRIPT_DIR/../Resources" && pwd)"
+
+# --- 1. Xcode CLI Tools ---
+if ! xcode-select -p &>/dev/null; then
+  echo "Installing Xcode CLI tools..."
+  xcode-select --install 2>/dev/null || true
+  TRIES=0
+  until xcode-select -p &>/dev/null; do
+    TRIES=$((TRIES + 1))
+    if [ "$TRIES" -ge 120 ]; then
+      error_dialog "Timed out waiting for Xcode CLI tools. Please install them manually and try again."
+      exit 1
+    fi
+    sleep 5
+  done
+fi
+
+# --- 2. Homebrew ---
+if ! command -v brew &>/dev/null; then
+  echo "Installing Homebrew (this requires your password)..."
+  osascript -e '
+    tell application "Terminal"
+      activate
+      do script "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\" && echo \"HOMEBREW_DONE\" > /tmp/.murph-brew-done"
+    end tell
+  ' 2>/dev/null || true
+
+  echo "Waiting for Homebrew installation (check Terminal window for password prompt)..."
+  TRIES=0
+  while [ ! -f /tmp/.murph-brew-done ]; do
+    TRIES=$((TRIES + 1))
+    if [ "$TRIES" -ge 120 ]; then
+      error_dialog "Timed out waiting for Homebrew installation. Please install Homebrew manually and try again."
+      exit 1
+    fi
+    sleep 5
+  done
+  rm -f /tmp/.murph-brew-done
+
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+fi
+echo "Homebrew: $(brew --version | head -1)"
+
+# --- 3. Node.js via nvm ---
+if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+  echo "Installing nvm..."
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+  \. "$NVM_DIR/nvm.sh"
+fi
+
+NODE_MAJOR=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  echo "Installing Node.js 20..."
+  nvm install 20
+  nvm use 20
+fi
+echo "Node: $(node --version)"
+
+# --- 4. pnpm ---
+if ! command -v pnpm &>/dev/null; then
+  echo "Installing pnpm..."
+  corepack enable
+  corepack prepare pnpm@latest --activate
+fi
+echo "pnpm: $(pnpm --version)"
+
+# --- 5. Extract payload to ~/murph ---
+# The installer wizard steps will handle this via the extract-payload step,
+# but we also extract the installer's own dist here so the wizard can run.
+if [ -f "$RESOURCES_DIR/murph-payload.tar.gz" ]; then
+  echo "Extracting Murph to $INSTALL_DIR..."
+  mkdir -p "$INSTALL_DIR"
+  tar xzf "$RESOURCES_DIR/murph-payload.tar.gz" -C "$INSTALL_DIR"
+  echo "Extraction complete"
+else
+  echo "WARNING: Payload not found at $RESOURCES_DIR/murph-payload.tar.gz"
+  echo "The wizard will attempt to locate it from other paths."
+fi
+
+cd "$INSTALL_DIR"
+
+# --- 6. Install minimal deps and start wizard ---
+echo "Installing installer dependencies..."
+pnpm install --prod 2>&1 || true
+
+echo "Starting install wizard server..."
+node packages/installer/dist/server.js &
+WIZARD_PID=$!
+
+# Wait for the server to be ready
+echo "Waiting for wizard server to start..."
+TRIES=0
+while ! curl -sf http://localhost:3142 &>/dev/null; do
+  TRIES=$((TRIES + 1))
+  if [ "$TRIES" -ge 15 ]; then
+    echo "Wizard server failed to start."
+    error_dialog "The install wizard failed to start. Check ~/.murph/installer.log for details."
+    exit 1
+  fi
+  sleep 1
+done
+
+# Open wizard in browser
+echo "Opening wizard in browser..."
+open "http://localhost:3142"
+
+notify "Murph Install Wizard is ready in your browser"
+
+# Wait for wizard to finish (it self-terminates via /api/finish)
+wait $WIZARD_PID 2>/dev/null || true
+
+echo "=== Murph Installer finished at $(date) ==="
