@@ -431,6 +431,16 @@ async function main() {
         }
       }, 60 * 60 * 1000); // every hour
 
+      // Wire up auto-updater
+      let autoUpdater: import('./auto-updater.js').AutoUpdater | null = null;
+      if (config.auto_update.enabled) {
+        const { AutoUpdater } = await import('./auto-updater.js');
+        autoUpdater = new AutoUpdater(config.auto_update, process.cwd(), config.agent.timezone);
+        autoUpdater.start();
+      } else {
+        logger.info('Auto-updater disabled by config');
+      }
+
       await agent.start();
 
       // Start dashboard in standalone mode
@@ -469,6 +479,9 @@ async function main() {
         if (dashboardProc.pid && !dashboardProc.killed) {
           dashboardProc.kill();
           logger.info('Dashboard stopped');
+        }
+        if (autoUpdater) {
+          autoUpdater.stop();
         }
         if (emailMaintenanceEngine) {
           emailMaintenanceEngine.stopCron();

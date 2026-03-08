@@ -191,6 +191,11 @@ export const MurphConfigSchema = z.object({
     // Privacy
     privacy_keywords: z.array(z.string()).default([]),
   }).default({}),
+  auto_update: z.object({
+    enabled: z.boolean().default(true),
+    check_interval_hours: z.number().min(1).max(24).default(1),
+    install_hour: z.number().min(0).max(23).default(1),
+  }).default({}),
   acknowledgment: z.object({
     enabled: z.boolean().default(true),
     style: z.enum(['pool', 'static', 'none']).default('pool'),

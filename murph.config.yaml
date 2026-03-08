@@ -132,6 +132,11 @@ email_maintenance:
   notify_on: "matches_only"
   privacy_keywords: []
 
+auto_update:
+  enabled: true
+  check_interval_hours: 1
+  install_hour: 1  # 1 AM local time
+
 acknowledgment:
   enabled: true
   style: pool            # 'pool' | 'static' | 'none'

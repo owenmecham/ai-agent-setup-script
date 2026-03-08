@@ -187,6 +187,24 @@ The dashboard includes 6 pre-built workflow templates:
 
 When `calendar_aware` is enabled, the engine fetches calendar events for the next 5 business days before LLM analysis. The AI can then suggest specific meeting times in reply drafts that don't conflict with existing appointments.
 
+## Auto-Update
+
+The agent automatically checks for code updates and applies them during a configurable install window.
+
+**How it works:**
+- Every `check_interval_hours` (default: 1 hour), runs `git ls-remote origin HEAD` (lightweight, no fetch, 15s timeout) and compares to local `git rev-parse HEAD`
+- If remote differs from local, checks whether the current hour (in agent timezone) matches `install_hour`
+- If in window: spawns `install.sh --update --yes` as a detached child process. The update script stops the running agent, pulls code, rebuilds, migrates, and restarts.
+- If outside window: logs "outside install window" and defers until the next check
+
+### Configuration Keys (`auto_update.*`)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `true` | Master toggle |
+| `check_interval_hours` | number | `1` | How often to check for updates (1-24) |
+| `install_hour` | number | `1` | Hour of day (0-23) when updates are applied |
+
 ## Security Model
 
 - Dashboard only on localhost:3141

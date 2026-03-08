@@ -302,6 +302,16 @@ else
   ok
 fi
 
+# Ensure uv tool binaries are on PATH
+export PATH="$HOME/.local/bin:$PATH"
+if ! grep -q '\.local/bin' "$HOME/.zshrc" 2>/dev/null; then
+  cat >> "$HOME/.zshrc" <<'ZSHRC'
+
+# uv tool binaries
+export PATH="$HOME/.local/bin:$PATH"
+ZSHRC
+fi
+
 # 8. PostgreSQL + pgvector
 check "PostgreSQL 16"
 if brew list postgresql@16 &>/dev/null; then
@@ -492,6 +502,16 @@ else
   echo "  Download from: https://global.plaud.ai/pages/app-download"
 fi
 
+# 11d. Google Chrome
+check "Google Chrome"
+if [ -d "/Applications/Google Chrome.app" ]; then
+  skip
+else
+  installing
+  brew install --cask google-chrome
+  ok
+fi
+
 # 12. Wrangler (Cloudflare)
 check "Wrangler CLI"
 if command -v wrangler &>/dev/null; then
@@ -505,6 +525,36 @@ fi
 # 13. Playwright (installed after pnpm install; just mark as pending here)
 # Playwright browsers are installed after pnpm install below, since
 # npx would otherwise prompt to download the package and hang the script.
+
+echo ""
+echo "======================================"
+echo "  Upgrading installed tools..."
+echo "======================================"
+
+# Brew formulae (git, python, uv, postgresql, ollama, etc.)
+check "Brew formulae upgrades"
+brew upgrade 2>/dev/null || true
+ok
+
+# Brew casks (Claude Desktop, Obsidian, Google Chrome)
+check "Brew cask upgrades"
+brew upgrade --cask 2>/dev/null || true
+ok
+
+# npm globals (claude-code, gws)
+check "npm global upgrades"
+npm update -g @anthropic-ai/claude-code @googleworkspace/cli 2>/dev/null || true
+ok
+
+# pnpm globals (wrangler)
+check "pnpm global upgrades"
+pnpm update -g 2>/dev/null || true
+ok
+
+# uv tools (plaud-mcp)
+check "uv tool upgrades"
+uv tool upgrade --all 2>/dev/null || true
+ok
 
 echo ""
 echo "======================================"
