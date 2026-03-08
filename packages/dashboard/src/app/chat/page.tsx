@@ -1,62 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MurphAvatar, UserAvatar } from '../../components/chat-avatars';
 import { MarkdownMessage } from '../../components/markdown-message';
 import { ConversationList } from '../../components/conversation-list';
 
-const INTERSTELLAR_QUOTES = [
-  'Do not go gentle into that good night.',
-  'We used to look up at the sky and wonder at our place in the stars, now we just look down and worry about our place in the dirt.',
-  'Mankind was born on Earth. It was never meant to die here.',
-  'Love is the one thing we\'re capable of perceiving that transcends dimensions of time and space.',
-  'We\'ve always defined ourselves by the ability to overcome the impossible.',
-  'Murphy\'s law doesn\'t mean that something bad will happen. It means that whatever can happen, will happen.',
-  'I\'m not afraid of death. I\'m an old physicist. I\'m afraid of time.',
-  'Maybe we\'ve spent too long trying to figure all this out with theory.',
-  'This world\'s a treasure, but it\'s been telling us to leave for a while now.',
-  '"It\'s not possible." "No. It\'s necessary."',
-  'Newton\'s third law. You\'ve got to leave something behind.',
-  'Once you\'re a parent, you\'re the ghost of your children\'s future.',
-  'We must reach far beyond our own lifespans. We must think not as individuals but as a species.',
-  'Our survival instinct is our single greatest source of inspiration.',
-  'Time is relative, okay? It can stretch and it can squeeze, but it can\'t run backwards.',
-  'Accident is the first building block of evolution.',
-  'Love isn\'t something that we invented. It\'s observable, powerful.',
-  'We\'re still pioneers, we barely begun. Our greatest accomplishments cannot be behind us, cause our destiny lies above us.',
-  'We\'ll find a way, Professor. We always have.',
-  'Mankind\'s next step will be our greatest.',
-  'Don\'t trust the right thing done for the wrong reason. The why of the thing, that\'s the foundation.',
-  'You said science was about admitting what we don\'t know.',
-  'We didn\'t run out of television screens and planes. We ran out of food.',
-  'You might have to decide between seeing your children again and the future of the human race.',
-  'We must confront the reality that nothing in our solar system can help us.',
-  'We\'re not meant to save the world. We\'re meant to leave it.',
-  'Don\'t judge me, Cooper. You were never tested like I was. Few men have been.',
-  'Absolute honesty isn\'t always the most diplomatic nor the safest form of communication with emotional beings.',
-  'He knew how hard it would be to get people to work together to save the species instead of themselves.',
-  'I don\'t care much for this pretending. We\'re back where we started. I want to know where we are. Where we\'re going.',
-  'Let me go home.',
-  'There are some things that aren\'t meant to be known.',
-  'A machine doesn\'t improvise well because you cannot program a fear of death.',
-  'I stopped believing you were coming back. Something seemed wrong about dreaming my life away.',
-  'When I was a kid, it seemed like they made something new every day.',
-  'She\'s out there. Setting up camp. Alone, in a strange galaxy. Perhaps right now she\'s settling in for the long nap.',
-  'Rage, rage against the dying of the light.',
-  'Every hour we spend on that planet will be seven years back on Earth.',
-  'Those aren\'t mountains. They\'re waves.',
-  'Today is my birthday. And it\'s a special one because you once told me that when you came back, we might be the same age.',
-  'I have a cue light I can use to show you when I\'m joking, if you like.',
-  'Parents are the ghosts of their children\'s future. I can\'t be your ghost anymore, Murph.',
-  'Cooper, this is no time for caution.',
-  'You have Murphy\'s fire, Amelia.',
-  'The only thing that can move across dimensions like time is gravity.',
-  'We are the future.',
-  'Step out of the shadow. Find something new to orbit.',
-  'It\'s like we\'ve forgotten who we are. Explorers, pioneers, not caretakers.',
-  'Nature can\'t be evil. Nature is formidable but it isn\'t evil.',
-  'That\'s what I love. You say science is about admitting what we don\'t know.',
-];
+interface ChatConfig {
+  agent: {
+    name: string;
+    welcome_quotes: string[];
+  };
+}
 
 interface AgentStepData {
   action: string;
@@ -73,8 +28,6 @@ interface Message {
   timestamp: Date;
   steps?: AgentStepData[];
 }
-
-const ONBOARDING_PROMPT = `The user just arrived for the first time and has no profile set up yet. Please introduce yourself as Murph — a personal AI assistant. Be warm and conversational. Ask them about themselves: their name, where they live, what they do for work, their hobbies, and any social media handles they'd like to share. When they provide information, use the "profile.update" action to save it. You can update incrementally as they share details — you don't need to wait for everything at once.`;
 
 function ActionSteps({ steps }: { steps: AgentStepData[] }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
@@ -142,13 +95,27 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const onboardingTriggered = useRef(false);
 
-  useEffect(() => {
-    setQuote(INTERSTELLAR_QUOTES[Math.floor(Math.random() * INTERSTELLAR_QUOTES.length)]);
-  }, []);
+  const { data: chatConfig } = useQuery({
+    queryKey: ['config'],
+    queryFn: async () => {
+      const res = await fetch('/api/config');
+      return res.json() as Promise<ChatConfig>;
+    },
+  });
 
-  // Check for onboarding on mount
+  const agentName = chatConfig?.agent?.name ?? 'Murph';
+  const welcomeQuotes = chatConfig?.agent?.welcome_quotes ?? [];
+
+  // Pick a random quote when config loads
   useEffect(() => {
-    if (onboardingTriggered.current) return;
+    if (welcomeQuotes.length > 0) {
+      setQuote(welcomeQuotes[Math.floor(Math.random() * welcomeQuotes.length)]);
+    }
+  }, [welcomeQuotes]);
+
+  // Check for onboarding on mount (gated on config being loaded)
+  useEffect(() => {
+    if (onboardingTriggered.current || !chatConfig) return;
     onboardingTriggered.current = true;
 
     fetch('/api/profile')
@@ -163,9 +130,12 @@ export default function ChatPage() {
       .catch(() => {
         // Can't check profile, skip onboarding
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chatConfig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const triggerOnboarding = async () => {
+    const name = chatConfig?.agent?.name ?? 'Murph';
+    const onboardingPrompt = `The user just arrived for the first time and has no profile set up yet. Please introduce yourself as ${name} — a personal AI assistant. Be warm and conversational. Ask them about themselves: their name, where they live, what they do for work, their hobbies, and any social media handles they'd like to share. When they provide information, use the "profile.update" action to save it. You can update incrementally as they share details — you don't need to wait for everything at once.`;
+
     const onboardingConvId = crypto.randomUUID();
     setConversationId(onboardingConvId);
     setLoading(true);
@@ -175,7 +145,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: ONBOARDING_PROMPT,
+          message: onboardingPrompt,
           conversationId: onboardingConvId,
           model,
         }),
@@ -185,16 +155,17 @@ export default function ChatPage() {
       const assistantMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: data.response ?? 'Hi there! I\'m Murph, your personal AI assistant. What\'s your name?',
+        content: data.response ?? `Hi there! I'm ${name}, your personal AI assistant. What's your name?`,
         timestamp: new Date(),
       };
 
       setMessages([assistantMessage]);
     } catch {
+      const name = chatConfig?.agent?.name ?? 'Murph';
       setMessages([{
         id: Date.now().toString(),
         role: 'assistant',
-        content: 'Hi there! I\'m Murph, your personal AI assistant. I\'d love to get to know you. What\'s your name?',
+        content: `Hi there! I'm ${name}, your personal AI assistant. I'd love to get to know you. What's your name?`,
         timestamp: new Date(),
       }]);
     } finally {
@@ -309,7 +280,7 @@ export default function ChatPage() {
             >
               {showHistory ? 'Hide History' : 'History'}
             </button>
-            <h2 className="text-2xl font-bold">Chat with Murph</h2>
+            <h2 className="text-2xl font-bold">Chat with {agentName}</h2>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-zinc-400 font-medium">Model:</span>
@@ -331,9 +302,11 @@ export default function ChatPage() {
           {messages.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center h-full gap-6">
               <MurphAvatar size={80} />
-              <blockquote className="text-zinc-400 italic text-center max-w-md text-lg">
-                &ldquo;{quote}&rdquo;
-              </blockquote>
+              {quote && (
+                <blockquote className="text-zinc-400 italic text-center max-w-md text-lg">
+                  &ldquo;{quote}&rdquo;
+                </blockquote>
+              )}
               <p className="text-zinc-500 text-sm">How can I help you today?</p>
             </div>
           )}
