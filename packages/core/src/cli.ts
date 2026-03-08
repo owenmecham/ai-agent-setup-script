@@ -449,6 +449,93 @@ async function main() {
       break;
     }
 
+    case 'google-auth': {
+      const { execSync, spawnSync } = await import('node:child_process');
+
+      // 1. Check if gws is installed, install if missing
+      console.log('Google Workspace CLI Setup');
+      console.log('─'.repeat(40));
+      console.log('');
+
+      try {
+        execSync('which gws', { stdio: 'ignore' });
+        console.log('✓ gws CLI is installed');
+      } catch {
+        console.log('Installing Google Workspace CLI...');
+        try {
+          execSync('npm install -g @googleworkspace/cli', { stdio: 'inherit' });
+          console.log('✓ gws CLI installed');
+        } catch (err) {
+          console.error('✗ Failed to install gws CLI. Try manually: npm install -g @googleworkspace/cli');
+          process.exit(1);
+        }
+      }
+
+      console.log('');
+      console.log('Step 1: Google Cloud project setup');
+      console.log('This will walk you through creating a Google Cloud project');
+      console.log('and enabling the required APIs.');
+      console.log('');
+
+      // 2. Run gws auth setup (interactive)
+      const setupResult = spawnSync('gws', ['auth', 'setup'], {
+        stdio: 'inherit',
+        shell: true,
+      });
+
+      if (setupResult.status !== 0) {
+        console.error('');
+        console.error('✗ gws auth setup failed. You can retry with: pnpm murph google-auth');
+        process.exit(1);
+      }
+
+      console.log('');
+      console.log('Step 2: Browser-based OAuth login');
+      console.log('A browser window will open for you to authorize access.');
+      console.log('');
+
+      // 3. Run gws auth login (opens browser)
+      const loginResult = spawnSync('gws', ['auth', 'login'], {
+        stdio: 'inherit',
+        shell: true,
+      });
+
+      if (loginResult.status !== 0) {
+        console.error('');
+        console.error('✗ gws auth login failed. You can retry with: pnpm murph google-auth');
+        process.exit(1);
+      }
+
+      console.log('');
+      console.log('Step 3: Verifying authentication...');
+
+      // 4. Verify auth works
+      const verifyResult = spawnSync('gws', ['gmail', 'users', 'getProfile', '--userId', 'me'], {
+        stdio: 'pipe',
+        shell: true,
+      });
+
+      if (verifyResult.status === 0) {
+        console.log('✓ Google authentication successful!');
+        console.log('');
+        console.log('Google Workspace is now connected. Available services:');
+        console.log('  • Gmail — read, search, send email');
+        console.log('  • Calendar — view and manage events');
+        console.log('  • Tasks — manage task lists');
+        console.log('  • Drive — search, read, and manage files');
+        console.log('');
+        console.log('The Google MCP server is configured in murph.config.yaml.');
+        console.log('Restart Murph to activate: pnpm murph start');
+      } else {
+        console.error('');
+        console.error('✗ Authentication verification failed.');
+        console.error('  The OAuth flow may not have completed. Try again:');
+        console.error('  pnpm murph google-auth');
+        process.exit(1);
+      }
+      break;
+    }
+
     case 'doctor': {
       const { runDoctor, printDoctorResult } = await import('./doctor.js');
       const result = await runDoctor();
@@ -478,6 +565,7 @@ async function main() {
       console.log('  start              Start the agent');
       console.log('  tui                Launch terminal UI');
       console.log('  doctor             Run system diagnostics');
+      console.log('  google-auth        Set up Google Workspace (OAuth)');
       console.log('  secret set <n> <v> Store a secret');
       console.log('  secret list        List all secrets');
       console.log('  secret delete <n>  Delete a secret');

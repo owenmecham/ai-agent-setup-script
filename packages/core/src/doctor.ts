@@ -236,7 +236,38 @@ export async function runDoctor(): Promise<DoctorResult> {
     // Config loading failed — already reported above
   }
 
-  // 6. Log file — verify writable
+  // 6. Google Workspace CLI + auth
+  const gwsResult = await spawnCheck('gws', ['--version']);
+  if (gwsResult.code === 0) {
+    checks.push({ name: 'Google Workspace CLI', status: 'pass', message: `Installed: ${gwsResult.stdout.trim()}` });
+
+    // Check if authenticated by trying a quick API call
+    const gwsAuthResult = await spawnCheck('gws', ['gmail', 'users', 'getProfile', '--userId', 'me']);
+    if (gwsAuthResult.code === 0) {
+      const emailMatch = gwsAuthResult.stdout.match(/"emailAddress"\s*:\s*"([^"]+)"/);
+      checks.push({
+        name: 'Google auth',
+        status: 'pass',
+        message: emailMatch ? `Authenticated as ${emailMatch[1]}` : 'Authenticated',
+      });
+    } else {
+      checks.push({
+        name: 'Google auth',
+        status: 'warn',
+        message: 'Not authenticated (Google MCP server will not connect)',
+        fix: 'Run: pnpm murph google-auth',
+      });
+    }
+  } else {
+    checks.push({
+      name: 'Google Workspace CLI',
+      status: 'warn',
+      message: 'gws CLI not installed (Google MCP server will not connect)',
+      fix: 'Install: npm install -g @googleworkspace/cli && pnpm murph google-auth',
+    });
+  }
+
+  // 7. Log file — verify writable
   try {
     const { loadConfig } = await import('./config.js');
     const config = loadConfig();

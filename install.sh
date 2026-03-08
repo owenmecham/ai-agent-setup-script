@@ -437,6 +437,16 @@ else
   ok
 fi
 
+# 10b. Google Workspace CLI (auth deferred to `pnpm murph google-auth`)
+check "Google Workspace CLI"
+if command -v gws &>/dev/null; then
+  skip
+else
+  installing
+  npm install -g @googleworkspace/cli
+  ok
+fi
+
 # Ensure npm global bin is on PATH (needed when nvm was just installed)
 NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin" || true
 if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
@@ -608,11 +618,9 @@ echo ""
 echo "  3. Telegram setup (if needed):"
 echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
 echo ""
-echo "  4. Google API setup (for Gmail/Drive):"
-echo "     - Create a project in Google Cloud Console"
-echo "     - Enable Gmail and Drive APIs"
-echo "     - Create OAuth 2.0 credentials"
-echo "     - Download credentials.json"
+echo "  4. Google Workspace setup (optional — run when ready):"
+echo "     pnpm murph google-auth"
+echo "     (Walks through Google Cloud project setup + browser OAuth)"
 echo ""
 echo "  5. Run diagnostics:"
 echo "     pnpm murph doctor"

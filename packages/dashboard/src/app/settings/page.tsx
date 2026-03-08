@@ -1,9 +1,11 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditableField } from '../../components/editable-field';
 import { ApprovalEditor } from '../../components/approval-editor';
 import { MCPEditor } from '../../components/mcp-editor';
+import { TagListEditor } from '../../components/tag-list-editor';
 
 interface Config {
   agent: {
@@ -11,10 +13,15 @@ interface Config {
     model: string;
     max_budget_per_message_usd: number;
     timezone: string;
+    welcome_quotes: string[];
   };
   security: {
     dashboard_port: number;
     approval_defaults: Record<string, 'auto' | 'notify' | 'require'>;
+  };
+  channels: {
+    imessage: { enabled: boolean; allowed_senders: string[] };
+    telegram: { enabled: boolean; allowed_user_ids: number[] };
   };
   memory: {
     short_term_buffer_size: number;
@@ -39,12 +46,37 @@ interface Config {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['config'],
     queryFn: async () => {
       const res = await fetch('/api/config');
       return res.json() as Promise<Config>;
+    },
+  });
+
+  const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
+
+  const { data: googleStatus, refetch: refetchGoogle } = useQuery({
+    queryKey: ['google-auth'],
+    queryFn: async () => {
+      const res = await fetch('/api/google-auth');
+      return res.json() as Promise<{
+        installed: boolean;
+        authenticated: boolean;
+        email: string | null;
+        error: string | null;
+      }>;
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: avatarStatus } = useQuery({
+    queryKey: ['avatar'],
+    queryFn: async () => {
+      const res = await fetch('/api/avatar');
+      return res.json() as Promise<{ hasCustom: boolean; timestamp?: number }>;
     },
   });
 
@@ -55,6 +87,21 @@ export default function SettingsPage() {
       body: JSON.stringify(updates),
     });
     queryClient.invalidateQueries({ queryKey: ['config'] });
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('avatar', file);
+    await fetch('/api/avatar', { method: 'POST', body: formData });
+    queryClient.invalidateQueries({ queryKey: ['avatar'] });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleAvatarReset = async () => {
+    await fetch('/api/avatar', { method: 'DELETE' });
+    queryClient.invalidateQueries({ queryKey: ['avatar'] });
   };
 
   if (isLoading || !config) {
@@ -96,6 +143,155 @@ export default function SettingsPage() {
               onSave={(v) => updateConfig({ agent: { timezone: v } })}
             />
           </div>
+
+          <div className="mt-4 pt-4 border-t border-zinc-800/50">
+            <label className="text-sm text-zinc-400 block mb-2">Agent Avatar</label>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded text-sm transition-colors"
+              >
+                Upload Avatar
+              </button>
+              {avatarStatus?.hasCustom && (
+                <button
+                  onClick={handleAvatarReset}
+                  className="text-sm text-zinc-600 hover:text-red-400 transition-colors"
+                >
+                  Reset to Default
+                </button>
+              )}
+              {avatarStatus?.hasCustom && (
+                <span className="text-xs text-zinc-500">Custom avatar active</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold mb-4">Channel Access</h3>
+          <p className="text-sm text-zinc-500 mb-4">
+            Control which users can interact with the agent via each channel.
+            An empty list means all senders are allowed.
+          </p>
+
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-sm font-medium text-zinc-300 mb-2">iMessage Allowed Senders</h4>
+              <TagListEditor
+                values={config.channels?.imessage?.allowed_senders ?? []}
+                onSave={async (values) => {
+                  await updateConfig({ channels: { imessage: { allowed_senders: values } } });
+                }}
+                placeholder="+18014401419 or email@example.com"
+                emptyMessage="All senders allowed"
+              />
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-zinc-300 mb-2">Telegram Allowed User IDs</h4>
+              <TagListEditor
+                values={(config.channels?.telegram?.allowed_user_ids ?? []).map(String)}
+                onSave={async (values) => {
+                  await updateConfig({
+                    channels: { telegram: { allowed_user_ids: values.map((v) => parseInt(v, 10)) } },
+                  });
+                }}
+                placeholder="123456789"
+                emptyMessage="All users allowed"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold mb-4">Google Workspace</h3>
+          <p className="text-sm text-zinc-500 mb-4">
+            Connect your Google account to enable Gmail, Calendar, Tasks, and Drive via the Google MCP server.
+          </p>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-2 h-2 rounded-full ${
+              googleStatus?.authenticated ? 'bg-green-500' :
+              googleStatus?.installed ? 'bg-yellow-500' :
+              'bg-zinc-600'
+            }`} />
+            <span className="text-sm">
+              {googleStatus?.authenticated
+                ? `Connected${googleStatus.email ? ` — ${googleStatus.email}` : ''}`
+                : googleStatus?.installed
+                  ? googleStatus?.error === 'Token expired or invalid'
+                    ? 'Token expired — re-authenticate below'
+                    : 'Not authenticated'
+                  : 'gws CLI not installed'}
+            </span>
+          </div>
+
+          {googleStatus?.authenticated ? (
+            <div className="space-y-3">
+              <div className="text-sm text-zinc-400">
+                <p className="font-medium text-zinc-300 mb-2">Available services:</p>
+                <ul className="list-disc list-inside space-y-1 text-zinc-500">
+                  <li>Gmail — read, search, send email</li>
+                  <li>Calendar — view and manage events</li>
+                  <li>Tasks — manage task lists</li>
+                  <li>Drive — search, read, and manage files</li>
+                </ul>
+              </div>
+              <button
+                onClick={async () => {
+                  setGoogleAuthLoading(true);
+                  try {
+                    await fetch('/api/google-auth', { method: 'POST' });
+                    await refetchGoogle();
+                  } finally {
+                    setGoogleAuthLoading(false);
+                  }
+                }}
+                disabled={googleAuthLoading}
+                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                {googleAuthLoading ? 'Re-authenticating...' : 'Re-authenticate'}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {googleStatus?.installed ? (
+                <button
+                  onClick={async () => {
+                    setGoogleAuthLoading(true);
+                    try {
+                      await fetch('/api/google-auth', { method: 'POST' });
+                      await refetchGoogle();
+                    } finally {
+                      setGoogleAuthLoading(false);
+                    }
+                  }}
+                  disabled={googleAuthLoading}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
+                >
+                  {googleAuthLoading ? 'Connecting...' : 'Connect Google Account'}
+                </button>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  Install the CLI first:{' '}
+                  <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
+                    npm install -g @googleworkspace/cli
+                  </code>
+                </p>
+              )}
+              <p className="text-xs text-zinc-600">
+                Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
@@ -153,6 +349,21 @@ export default function SettingsPage() {
               onSave={(v) => updateConfig({ memory: { max_context_tokens: parseInt(v) } })}
             />
           </div>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h3 className="text-lg font-semibold mb-4">Welcome Quotes</h3>
+          <p className="text-sm text-zinc-500 mb-4">
+            Customize the quotes shown on the chat welcome screen. These can be daily affirmations, principles, or themed quotes.
+          </p>
+          <TagListEditor
+            values={config.agent.welcome_quotes ?? []}
+            onSave={async (values) => {
+              await updateConfig({ agent: { welcome_quotes: values } });
+            }}
+            placeholder="Enter a quote..."
+            multiline
+          />
         </div>
 
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">

@@ -22,6 +22,12 @@ security:
     telegram.send: notify
     bop.*: require
     mcp.*: auto
+    mcp.google.gmail.users.messages.send: require
+    mcp.google.gmail.users.drafts.send: require
+    mcp.google.calendar.events.insert: notify
+    mcp.google.calendar.events.delete: require
+    mcp.google.drive.files.delete: require
+    mcp.google.drive.files.create: notify
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
@@ -62,13 +68,13 @@ mcp_servers:
     transport: "stdio"
     command: "npx"
     args: ["@playwright/mcp@latest"]
+  - name: "google"
+    transport: "stdio"
+    command: "gws"
+    args: ["mcp"]
 
 integrations:
   bop:
-    enabled: false
-  gmail:
-    enabled: false
-  gdrive:
     enabled: false
   gohighlevel:
     enabled: false

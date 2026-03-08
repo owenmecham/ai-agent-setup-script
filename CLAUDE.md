@@ -41,6 +41,8 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 
 - `pnpm build` — Build all packages
 - `pnpm murph start` — Start the agent
+- `pnpm murph doctor` — Run system diagnostics
+- `pnpm murph google-auth` — Set up Google Workspace OAuth (interactive)
 - `pnpm murph secret set/list/delete` — Manage secrets
 - `pnpm run migrate` — Run database migrations
 
@@ -72,6 +74,28 @@ Full re-install (re-checks all tools + code):
 ## Database
 
 PostgreSQL with tables: messages, entities, memories (pgvector), audit_log, secrets, conversations, scheduled_tasks, knowledge_documents, knowledge_chunks (pgvector).
+
+## Google Workspace Integration
+
+Google Workspace (Gmail, Calendar, Tasks, Drive) is integrated via the official `@googleworkspace/cli` MCP server.
+
+**Setup:** `pnpm murph google-auth` — walks through Google Cloud project creation, API enablement, and browser-based OAuth. Can also be triggered from the dashboard Settings page.
+
+**How it works:**
+- The `gws mcp` command runs as an MCP server (stdio transport) alongside the agent
+- OAuth tokens are stored AES-256-GCM encrypted, key in macOS Keychain
+- Tokens auto-refresh indefinitely (unless consent screen is in "Testing" mode — 7-day expiry)
+- Write actions (send email, delete calendar events, delete Drive files) go through approval gates
+- Read actions (list emails, view calendar, search Drive) are auto-approved
+
+**Approval defaults for Google MCP actions:**
+- `mcp.google.gmail.users.messages.send` → `require`
+- `mcp.google.gmail.users.drafts.send` → `require`
+- `mcp.google.calendar.events.insert` → `notify`
+- `mcp.google.calendar.events.delete` → `require`
+- `mcp.google.drive.files.delete` → `require`
+- `mcp.google.drive.files.create` → `notify`
+- All other Google MCP actions → `auto` (inherited from `mcp.*`)
 
 ## Security Model
 

@@ -3,8 +3,7 @@ import { loadDashboardConfig } from '../../../lib/config';
 
 const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
   bop: 'BOP Framework hive mind',
-  gmail: 'Email send/receive',
-  gdrive: 'Google Drive file access',
+  google: 'Google Workspace (Gmail, Calendar, Tasks, Drive) via MCP',
   gohighlevel: 'GoHighLevel CRM',
   hubspot: 'HubSpot CRM',
   playwright: 'Browser automation',
