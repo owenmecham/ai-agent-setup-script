@@ -53,6 +53,30 @@ export class McpClientManager {
         });
       }
 
+      // Capture transport-level errors (spawn failures, stdin/stdout errors)
+      const transportErrors: string[] = [];
+      transport.onerror = (error: Error) => {
+        transportErrors.push(error.message);
+      };
+
+      // Capture exit code — override start() to hook the ChildProcess 'close'
+      // event before the SDK nulls _process (stdio.js:83-84)
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
+      const originalStart = transport.start.bind(transport);
+      transport.start = async function () {
+        await originalStart();
+        const proc = (transport as any)._process as
+          | import('node:child_process').ChildProcess
+          | undefined;
+        if (proc) {
+          proc.on('close', (code: number | null, signal: string | null) => {
+            exitCode = code;
+            exitSignal = signal;
+          });
+        }
+      };
+
       const client = new Client({ name: 'murph', version: '0.1.0' }, { capabilities: {} });
       try {
         await client.connect(transport);
@@ -65,9 +89,19 @@ export class McpClientManager {
             setTimeout(resolve, 500);
           });
         }
-        if (stderrOutput) {
-          logger.error({ name: config.name, stderr: stderrOutput.trim() }, 'MCP server stderr output');
-        }
+
+        // Always log diagnostic context on failure
+        const diag: Record<string, unknown> = {
+          server: config.name,
+          command: config.command,
+          args: config.args ?? [],
+          stderr: stderrOutput.trim() || '(empty)',
+        };
+        if (exitCode !== null) diag.exitCode = exitCode;
+        if (exitSignal) diag.exitSignal = exitSignal;
+        if (transportErrors.length > 0) diag.transportErrors = transportErrors;
+
+        logger.error(diag, 'MCP server failed to connect');
         throw err;
       }
 
