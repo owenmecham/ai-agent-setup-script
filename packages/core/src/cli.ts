@@ -555,7 +555,7 @@ async function main() {
       console.log('');
 
       // 3. Run gws auth login (opens browser)
-      const loginResult = spawnSync('gws', ['auth', 'login'], {
+      const loginResult = spawnSync('gws', ['auth', 'login', '-s', 'drive,gmail,calendar,tasks,sheets,docs,slides'], {
         stdio: 'inherit',
         shell: true,
       });
@@ -583,6 +583,9 @@ async function main() {
         console.log('  • Calendar — view and manage events');
         console.log('  • Tasks — manage task lists');
         console.log('  • Drive — search, read, and manage files');
+        console.log('  • Sheets — read and edit spreadsheets');
+        console.log('  • Docs — read and edit documents');
+        console.log('  • Slides — read and edit presentations');
         console.log('');
         console.log('The Google MCP server is configured in murph.config.yaml.');
         console.log('Restart Murph to activate: pnpm murph start');

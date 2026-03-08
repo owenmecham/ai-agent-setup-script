@@ -78,7 +78,7 @@ mcp_servers:
   - name: "google"
     transport: "stdio"
     command: "gws"
-    args: ["mcp"]
+    args: ["mcp", "-s", "drive,gmail,calendar,tasks,sheets,docs,slides"]
   - name: "plaud"
     transport: "stdio"
     command: "plaud-mcp"
