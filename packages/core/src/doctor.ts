@@ -263,7 +263,7 @@ export async function runDoctor(): Promise<DoctorResult> {
       name: 'Google Workspace CLI',
       status: 'warn',
       message: 'gws CLI not installed (Google MCP server will not connect)',
-      fix: 'Install: npm install -g @googleworkspace/cli && pnpm murph google-auth',
+      fix: 'Install: npm install -g @googleworkspace/cli@0.6.3 && pnpm murph google-auth',
     });
   }
 

@@ -477,7 +477,7 @@ if command -v gws &>/dev/null; then
   skip
 else
   installing
-  npm install -g @googleworkspace/cli
+  npm install -g @googleworkspace/cli@0.6.3
   ok
 fi
 
@@ -557,7 +557,8 @@ ok
 
 # npm globals (claude-code, gws)
 check "npm global upgrades"
-npm update -g @anthropic-ai/claude-code @googleworkspace/cli 2>/dev/null || true
+npm update -g @anthropic-ai/claude-code 2>/dev/null || true
+npm install -g @googleworkspace/cli@0.6.3 2>/dev/null || true
 ok
 
 # pnpm globals (wrangler)
