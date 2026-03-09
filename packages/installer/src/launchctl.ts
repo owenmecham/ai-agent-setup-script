@@ -109,8 +109,9 @@ export function buildAgentPlist(murphDir: string): string {
     '/opt/homebrew/opt/postgresql@16/bin',
   ];
 
-  // Node.js is installed to /usr/local/bin by the official .pkg installer
-  const nodePath = '/usr/local/bin/node';
+  // Prefer node inside MurphNode.app (FDA-compatible), fall back to /usr/local/bin/node
+  const appNodePath = join(murphDir, 'MurphNode.app', 'Contents', 'MacOS', 'node');
+  const nodePath = existsSync(appNodePath) ? appNodePath : '/usr/local/bin/node';
 
   const fullPath = pathParts.join(':');
 

@@ -51,8 +51,14 @@ app.post('/api/open-fda-settings', (_req, res) => {
   res.json({ opened: true });
 });
 
-// Return the detected node binary path (prefer /usr/local/bin/node for FDA)
+// Return the detected node binary path (prefer MurphNode.app for FDA)
+const appNodePath = join(homedir(), 'murph', 'MurphNode.app', 'Contents', 'MacOS', 'node');
+
 app.get('/api/node-path', (_req, res) => {
+  if (existsSync(appNodePath)) {
+    res.json({ nodePath: appNodePath });
+    return;
+  }
   if (existsSync('/usr/local/bin/node')) {
     res.json({ nodePath: '/usr/local/bin/node' });
     return;
@@ -69,7 +75,9 @@ app.get('/api/node-path', (_req, res) => {
 // Check whether the node binary can read ~/Library/Messages/chat.db (FDA proxy)
 app.get('/api/check-node-fda', (_req, res) => {
   let nodePath: string;
-  if (existsSync('/usr/local/bin/node')) {
+  if (existsSync(appNodePath)) {
+    nodePath = appNodePath;
+  } else if (existsSync('/usr/local/bin/node')) {
     nodePath = '/usr/local/bin/node';
   } else {
     try {

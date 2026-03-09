@@ -2,6 +2,7 @@ import { checkMacOS } from './check-macos.js';
 import { xcodeCli } from './xcode-cli.js';
 import { homebrew } from './homebrew.js';
 import { nodejs } from './nodejs.js';
+import { nodeAppBundle } from './node-app-bundle.js';
 import { pnpmStep } from './pnpm.js';
 import { postgresql } from './postgresql.js';
 import { ollama } from './ollama.js';
@@ -27,6 +28,7 @@ export const ALL_STEPS: InstallStep[] = [
   xcodeCli,
   homebrew,
   nodejs,
+  nodeAppBundle,
   pnpmStep,
   postgresql,
   ollama,
