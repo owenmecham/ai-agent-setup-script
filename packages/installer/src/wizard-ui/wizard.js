@@ -28,7 +28,7 @@ function updatePrereqButton() {
   const allChecked = Array.from(
     document.querySelectorAll('#screen-prerequisites input[type=checkbox]')
   ).every(c => c.checked);
-  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted && nodeFdaGranted);
+  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted);
 }
 
 document.querySelectorAll('#screen-prerequisites input[type=checkbox]').forEach(cb => {
@@ -85,12 +85,12 @@ async function checkNodeFda() {
       statusEl.className = 'perm-status granted';
     } else {
       nodeFdaGranted = false;
-      statusEl.textContent = '✗ Not granted';
+      statusEl.textContent = '✗ Not granted — configure after install';
       statusEl.className = 'perm-status not-granted';
     }
   } catch {
     nodeFdaGranted = false;
-    statusEl.textContent = 'Check failed';
+    statusEl.textContent = 'Check failed — configure after install';
     statusEl.className = 'perm-status not-granted';
   }
   updatePrereqButton();
