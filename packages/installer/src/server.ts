@@ -1,8 +1,8 @@
 import express from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ALL_STEPS, getStep, type InstallStep } from './steps/index.js';
-import { startAgent, stopAgent, isRunning, AGENT_LABEL } from './launchctl.js';
+import { ALL_STEPS, getStep } from './steps/index.js';
+import { startAgent, isRunning, AGENT_LABEL } from './launchctl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WIZARD_UI_DIR = join(__dirname, 'wizard-ui');
@@ -38,19 +38,9 @@ for (const step of ALL_STEPS) {
 
 // --- Full Disk Access helpers ---
 
-import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants } from 'node:fs';
 
-function checkFullDiskAccess(): boolean {
-  try {
-    const chatDbPath = `${homedir()}/Library/Messages/chat.db`;
-    accessSync(chatDbPath, constants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+
 
 // --- Routes ---
 
@@ -61,16 +51,7 @@ app.get('/', (_req, res) => {
   res.sendFile(join(WIZARD_UI_DIR, 'index.html'));
 });
 
-// Check Full Disk Access
-app.get('/api/check-fda', (_req, res) => {
-  res.json({ granted: checkFullDiskAccess() });
-});
 
-// Open Full Disk Access settings pane
-app.post('/api/open-fda-settings', (_req, res) => {
-  spawnSync('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']);
-  res.json({ opened: true });
-});
 
 // --- Accessibility helpers ---
 

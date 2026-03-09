@@ -27,7 +27,7 @@ function updatePrereqButton() {
   const allChecked = Array.from(
     document.querySelectorAll('#screen-prerequisites input[type=checkbox]')
   ).every(c => c.checked);
-  document.getElementById('btn-prereq-continue').disabled = !(allChecked && fdaGranted && accessibilityGranted);
+  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted);
 }
 
 document.querySelectorAll('#screen-prerequisites input[type=checkbox]').forEach(cb => {
@@ -40,29 +40,6 @@ async function openFdaSettings() {
   } catch { /* ignore */ }
 }
 
-async function checkFda() {
-  const statusEl = document.getElementById('fda-status');
-  statusEl.textContent = 'Checking...';
-  statusEl.className = 'perm-status checking';
-  try {
-    const res = await fetch('/api/check-fda');
-    const data = await res.json();
-    if (data.granted) {
-      fdaGranted = true;
-      statusEl.textContent = '✓ Granted';
-      statusEl.className = 'perm-status granted';
-    } else {
-      fdaGranted = false;
-      statusEl.textContent = '✗ Not granted';
-      statusEl.className = 'perm-status not-granted';
-    }
-  } catch {
-    fdaGranted = false;
-    statusEl.textContent = 'Check failed';
-    statusEl.className = 'perm-status not-granted';
-  }
-  updatePrereqButton();
-}
 
 async function openAccessibilitySettings() {
   try {
