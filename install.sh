@@ -565,9 +565,8 @@ check "Brew cask upgrades"
 brew upgrade --cask 2>/dev/null || true
 ok
 
-# npm globals (claude-code, gws)
+# npm globals (gws)
 check "npm global upgrades"
-npm update -g @anthropic-ai/claude-code 2>/dev/null || true
 npm install -g @googleworkspace/cli@0.6.3 2>/dev/null || true
 ok
 

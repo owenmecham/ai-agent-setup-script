@@ -114,7 +114,7 @@ ollama pull nomic-embed-text
 ### 4. Install Claude Code CLI
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+curl -fsSL https://claude.ai/install.sh | bash
 ```
 
 ### 5. Install project dependencies
