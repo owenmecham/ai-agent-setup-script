@@ -1,36 +1,28 @@
-import { accessSync, constants } from 'node:fs';
-import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import type { InstallStep } from './index.js';
 
-function hasFda(): boolean {
-  try {
-    accessSync(`${homedir()}/Library/Messages/chat.db`, constants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
+function checkAccessibility(): boolean {
+  const result = spawnSync('osascript', [
+    '-e', 'tell application "System Events" to get name of first process',
+  ], { stdio: 'pipe', timeout: 5000 });
+  return result.status === 0;
 }
 
 export const permissions: InstallStep = {
   name: 'permissions',
   label: 'macOS Permissions',
-  description: 'Verify Full Disk Access and Accessibility permissions',
+  description: 'Verify Accessibility permissions',
   required: false,
 
   async check() {
-    return hasFda() ? 'done' : 'needed';
+    return checkAccessibility() ? 'done' : 'needed';
   },
 
   async execute(emit) {
-    if (hasFda()) {
-      emit('Full Disk Access is granted');
+    if (checkAccessibility()) {
+      emit('Accessibility is granted');
     } else {
-      emit('Full Disk Access is NOT yet granted.');
-      emit('To grant it:');
-      emit('  1. Open System Settings > Privacy & Security > Full Disk Access');
-      emit('  2. Add Terminal.app (or your terminal)');
-      emit('  3. Restart your terminal');
-      emit('');
+      emit('Accessibility is NOT yet granted.');
       emit('For Accessibility access (needed for sending iMessages via AppleScript):');
       emit('  1. Open System Settings > Privacy & Security > Accessibility');
       emit('  2. Add Terminal.app (or your terminal)');
