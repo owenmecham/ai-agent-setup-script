@@ -1,5 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { InstallStep } from './index.js';
+import { runCommand } from '../util.js';
+
+const CLAUDE_BIN = join(homedir(), '.claude', 'bin', 'claude');
 
 export const claudeCli: InstallStep = {
   name: 'claude-cli',
@@ -8,46 +14,56 @@ export const claudeCli: InstallStep = {
   required: true,
 
   async check() {
+    // Check native install location first
+    if (existsSync(CLAUDE_BIN)) {
+      const result = spawnSync(CLAUDE_BIN, ['--version'], { stdio: 'pipe' });
+      if (result.status === 0) return 'done';
+    }
+    // Fall back to PATH
     const result = spawnSync('claude', ['--version'], { stdio: 'pipe' });
     return result.status === 0 ? 'done' : 'needed';
   },
 
   async execute(emit) {
-    const check = spawnSync('claude', ['--version'], { stdio: 'pipe' });
-    if (check.status === 0) {
-      emit(`Claude CLI already installed (${check.stdout.toString().trim()})`);
-      return;
+    // Check if already installed
+    const checkPaths = [CLAUDE_BIN, 'claude'];
+    for (const bin of checkPaths) {
+      const check = spawnSync(bin, ['--version'], { stdio: 'pipe' });
+      if (check.status === 0) {
+        emit(`Claude CLI already installed (${check.stdout.toString().trim()})`);
+        ensurePath(emit);
+        return;
+      }
     }
 
-    emit('Installing Claude Code CLI (you may be prompted for your password)...');
+    emit('Installing Claude Code CLI via native installer...');
 
-    // /usr/local is owned by root (official Node.js .pkg installer), so npm -g needs sudo.
-    // Use osascript to show the native macOS password dialog.
-    const install = spawnSync('osascript', [
-      '-e',
-      'do shell script "npm install -g @anthropic-ai/claude-code" with administrator privileges',
-    ], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 300_000,
-    });
+    // Use the official standalone installer — no npm/sudo needed.
+    // Installs to ~/.claude/bin/ and auto-updates.
+    await runCommand('bash', ['-c', 'curl -fsSL https://claude.ai/install.sh | bash'], emit);
 
-    if (install.status !== 0) {
-      throw new Error(`Failed to install Claude Code CLI: ${install.stderr.toString()}`);
-    }
-
-    // Add npm global bin to PATH
-    const npmBin = spawnSync('npm', ['prefix', '-g'], { stdio: 'pipe' });
-    if (npmBin.status === 0) {
-      const binDir = `${npmBin.stdout.toString().trim()}/bin`;
-      process.env.PATH = `${binDir}:${process.env.PATH}`;
-    }
+    ensurePath(emit);
 
     // Verify
-    const verify = spawnSync('claude', ['--version'], { stdio: 'pipe' });
+    const verify = spawnSync(CLAUDE_BIN, ['--version'], { stdio: 'pipe' });
     if (verify.status === 0) {
       emit(`Claude Code CLI installed (${verify.stdout.toString().trim()})`);
     } else {
-      emit('Claude Code CLI installed');
+      // Try PATH fallback
+      const fallback = spawnSync('claude', ['--version'], { stdio: 'pipe' });
+      if (fallback.status === 0) {
+        emit(`Claude Code CLI installed (${fallback.stdout.toString().trim()})`);
+      } else {
+        throw new Error('Claude Code CLI installation failed — claude not found after install');
+      }
     }
   },
 };
+
+function ensurePath(emit: (line: string) => void): void {
+  const claudeBinDir = join(homedir(), '.claude', 'bin');
+  if (!process.env.PATH?.includes(claudeBinDir)) {
+    process.env.PATH = `${claudeBinDir}:${process.env.PATH}`;
+    emit(`Added ${claudeBinDir} to PATH`);
+  }
+}
