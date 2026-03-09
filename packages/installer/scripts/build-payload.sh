@@ -17,7 +17,7 @@ echo "=== Building release payload ==="
 # --- 1. Clean all build caches and rebuild from scratch ---
 echo "Cleaning build artifacts..."
 find "$REPO_ROOT/packages" -name "dist" -type d -not -path "*/node_modules/*" -exec rm -rf {} + 2>/dev/null || true
-find "$REPO_ROOT" -name ".turbo" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$REPO_ROOT" -name ".turbo" -type d -not -path "*/node_modules/*" -exec rm -rf {} + 2>/dev/null || true
 find "$REPO_ROOT" -name "*.tsbuildinfo" -not -path "*/node_modules/*" -delete 2>/dev/null || true
 rm -rf "$BUILD_DIR"
 
