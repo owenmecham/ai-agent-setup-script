@@ -16,6 +16,7 @@ function showScreen(name) {
   if (name === 'verify') {
     loadNodePath();
     checkNodeFda();
+    checkAccessibility();
     runVerification();
   }
 }
@@ -30,7 +31,7 @@ function updatePrereqButton() {
   const allChecked = Array.from(
     document.querySelectorAll('#screen-prerequisites input[type=checkbox]')
   ).every(c => c.checked);
-  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted);
+  document.getElementById('btn-prereq-continue').disabled = !allChecked;
 }
 
 document.querySelectorAll('#screen-prerequisites input[type=checkbox]').forEach(cb => {
@@ -71,7 +72,6 @@ async function checkAccessibility() {
     statusEl.textContent = 'Check failed';
     statusEl.className = 'perm-status not-granted';
   }
-  updatePrereqButton();
 }
 
 async function checkNodeFda() {
