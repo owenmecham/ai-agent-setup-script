@@ -103,7 +103,7 @@ export async function POST() {
   cleanupAuthProcess();
 
   try {
-    const proc = spawn('uvx', ['workspace-mcp', '--transport', 'http', '--port', '9876', '--tool-tier', 'core'], {
+    const proc = spawn('uvx', ['workspace-mcp', '--transport', 'streamable-http', '--port', '9876', '--single-user', '--tool-tier', 'core'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     });
