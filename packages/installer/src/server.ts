@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_STEPS, getStep } from './steps/index.js';
 import { startAgent, isRunning, AGENT_LABEL } from './launchctl.js';
+import { ensureStableNode } from './steps/stabilize-node.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WIZARD_UI_DIR = join(__dirname, 'wizard-ui');
@@ -39,11 +40,15 @@ for (const step of ALL_STEPS) {
 // --- Full Disk Access helpers ---
 
 import { spawnSync, execSync } from 'node:child_process';
-import { accessSync, constants, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 app.post('/api/open-fda-settings', (_req, res) => {
-  spawnSync('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']);
+  // Ventura+ / Sequoia format first, fall back to older format
+  const result = spawnSync('open', ['x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles']);
+  if (result.status !== 0) {
+    spawnSync('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']);
+  }
   res.json({ opened: true });
 });
 
@@ -63,7 +68,7 @@ app.get('/api/node-path', (_req, res) => {
   res.json({ nodePath });
 });
 
-// Check whether the node process can read ~/Library/Messages/chat.db (FDA proxy)
+// Check whether the stable node binary can read ~/Library/Messages/chat.db (FDA proxy)
 app.get('/api/check-node-fda', (_req, res) => {
   const stableNode = join(homedir(), 'murph', 'bin', 'node');
   let nodePath: string;
@@ -78,13 +83,12 @@ app.get('/api/check-node-fda', (_req, res) => {
   }
 
   const chatDbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
-  let granted = false;
-  try {
-    accessSync(chatDbPath, constants.R_OK);
-    granted = true;
-  } catch {
-    granted = false;
-  }
+  // Spawn the target binary to test access — the installer's own process may not have FDA
+  const result = spawnSync(nodePath, [
+    '-e',
+    `require('fs').accessSync(${JSON.stringify(chatDbPath)}, require('fs').constants.R_OK)`,
+  ], { stdio: 'pipe', timeout: 5000 });
+  const granted = result.status === 0;
   res.json({ granted, nodePath });
 });
 
@@ -295,6 +299,9 @@ app.get('/api/agent-status', (_req, res) => {
 });
 
 // --- Start server ---
+
+// Ensure ~/murph/bin/node exists before the prerequisites page loads
+ensureStableNode();
 
 const PORT = parseInt(process.env.INSTALLER_PORT ?? '3142', 10);
 

@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import type { InstallStep } from './index.js';
 
 const STABLE_DIR = join(homedir(), 'murph', 'bin');
-const STABLE_NODE = join(STABLE_DIR, 'node');
+export const STABLE_NODE = join(STABLE_DIR, 'node');
 
-function stableNodeWorks(): boolean {
+export function stableNodeWorks(): boolean {
   if (!existsSync(STABLE_NODE)) return false;
   const result = spawnSync(STABLE_NODE, ['--version'], { stdio: 'pipe' });
   return result.status === 0;
@@ -37,6 +37,24 @@ function resolveSourceNode(): string | null {
   return null;
 }
 
+/**
+ * Copy the current node binary to ~/murph/bin/node (silent — no emit needed).
+ * Safe to call multiple times; skips if the stable binary already works.
+ */
+export function ensureStableNode(): void {
+  if (stableNodeWorks()) return;
+
+  const source = resolveSourceNode();
+  if (!source) return; // can't copy yet — no node found
+
+  if (!existsSync(STABLE_DIR)) {
+    mkdirSync(STABLE_DIR, { recursive: true });
+  }
+
+  copyFileSync(source, STABLE_NODE);
+  chmodSync(STABLE_NODE, 0o755);
+}
+
 export const stabilizeNode: InstallStep = {
   name: 'stabilize-node',
   label: 'Stable Node Binary',
@@ -54,14 +72,7 @@ export const stabilizeNode: InstallStep = {
     }
 
     emit(`Source node: ${source}`);
-
-    if (!existsSync(STABLE_DIR)) {
-      mkdirSync(STABLE_DIR, { recursive: true });
-      emit(`Created ${STABLE_DIR}`);
-    }
-
-    copyFileSync(source, STABLE_NODE);
-    chmodSync(STABLE_NODE, 0o755);
+    ensureStableNode();
     emit(`Copied to ${STABLE_NODE}`);
 
     // Verify the copy works
