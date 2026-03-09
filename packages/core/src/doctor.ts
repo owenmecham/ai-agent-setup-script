@@ -161,7 +161,7 @@ export async function runDoctor(): Promise<DoctorResult> {
       name: 'Claude CLI',
       status: 'fail',
       message: 'Claude CLI not found or not working',
-      fix: 'Install: npm install -g @anthropic-ai/claude-code',
+      fix: 'Install: curl -fsSL https://claude.ai/install.sh | bash',
     });
   }
 

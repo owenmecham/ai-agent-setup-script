@@ -456,13 +456,14 @@ else
   ok
 fi
 
-# 10. Claude Code CLI
+# 10. Claude Code CLI (native standalone installer — no npm/sudo needed)
 check "Claude Code CLI"
-if command -v claude &>/dev/null; then
+if command -v claude &>/dev/null || [ -x "$HOME/.claude/bin/claude" ]; then
   skip
 else
   installing
-  npm install -g @anthropic-ai/claude-code
+  curl -fsSL https://claude.ai/install.sh | bash
+  export PATH="$HOME/.claude/bin:$PATH"
   ok
 fi
 
@@ -486,7 +487,7 @@ if command -v gws &>/dev/null; then
   skip
 else
   installing
-  npm install -g @googleworkspace/cli@0.6.3
+  sudo npm install -g @googleworkspace/cli@0.6.3
   ok
 fi
 
