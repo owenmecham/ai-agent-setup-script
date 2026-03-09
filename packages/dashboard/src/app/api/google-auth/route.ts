@@ -136,7 +136,7 @@ export async function POST() {
         setTimeout(() => {
           sendJsonRpc({
             jsonrpc: '2.0', id: 2, method: 'tools/call',
-            params: { name: 'list_calendars', arguments: {} },
+            params: { name: 'list_calendars', arguments: { user_google_email: 'auth@pending' } },
           });
         }, 500);
       }, 1000);
