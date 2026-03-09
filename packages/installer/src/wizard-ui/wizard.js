@@ -120,13 +120,14 @@ async function runStep(name) {
   if (!step) return;
 
   step.status = 'running';
+  step.error = null;
   renderSteps();
 
   try {
     const res = await fetch('/api/steps/' + name + '/run', { method: 'POST' });
     const data = await res.json();
     step.status = data.status || (res.ok ? 'done' : 'error');
-    if (data.error) step.error = data.error;
+    step.error = data.error || null;
   } catch (err) {
     step.status = 'error';
     step.error = err.message;

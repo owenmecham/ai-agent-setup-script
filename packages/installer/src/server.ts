@@ -86,6 +86,7 @@ app.get('/api/steps', async (_req, res) => {
           const checkResult = await step.check();
           if (checkResult === 'done') {
             stepStatus[step.name] = 'done';
+            stepErrors[step.name] = '';
           }
         } catch {
           // leave as pending
@@ -152,6 +153,7 @@ app.post('/api/run-all', async (_req, res) => {
       }
 
       stepStatus[step.name] = 'running';
+      stepErrors[step.name] = '';
       broadcastLog(`--- Starting: ${step.label} ---`);
 
       try {
