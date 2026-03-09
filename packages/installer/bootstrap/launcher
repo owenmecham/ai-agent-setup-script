@@ -155,7 +155,7 @@ cd "$INSTALL_DIR"
 
 # --- 6. Install minimal deps and start wizard ---
 echo "Installing installer dependencies..."
-pnpm install --prod 2>&1 || true
+pnpm install --filter @murph/installer --prod 2>&1 || true
 
 echo "Starting install wizard server..."
 node packages/installer/dist/server.js &
