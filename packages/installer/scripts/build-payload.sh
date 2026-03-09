@@ -29,7 +29,8 @@ cp "$REPO_ROOT/pnpm-workspace.yaml" "$PAYLOAD_DIR/"
 cp "$REPO_ROOT/pnpm-lock.yaml" "$PAYLOAD_DIR/"
 cp "$REPO_ROOT/murph.config.yaml" "$PAYLOAD_DIR/murph.config.yaml.template"
 
-# Migrate script — runs via node --experimental-strip-types at install time
+# Migrate script — prefer compiled JS, keep TS as fallback
+cp "$REPO_ROOT/scripts/migrate.js" "$PAYLOAD_DIR/scripts/"
 cp "$REPO_ROOT/scripts/migrate.ts" "$PAYLOAD_DIR/scripts/"
 
 # Config files (scopes, etc.)

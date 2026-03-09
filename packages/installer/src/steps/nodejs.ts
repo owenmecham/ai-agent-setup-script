@@ -7,8 +7,8 @@ import { runCommand } from '../util.js';
 
 export const nodejs: InstallStep = {
   name: 'nodejs',
-  label: 'Node.js 20+',
-  description: 'Install Node.js 20+ via nvm',
+  label: 'Node.js 22+',
+  description: 'Install Node.js 22+ via nvm',
   required: true,
 
   async check() {
@@ -16,7 +16,7 @@ export const nodejs: InstallStep = {
     if (result.status !== 0) return 'needed';
     const version = result.stdout.toString().trim().replace('v', '');
     const major = parseInt(version.split('.')[0], 10);
-    return major >= 20 ? 'done' : 'needed';
+    return major >= 22 ? 'done' : 'needed';
   },
 
   async execute(emit) {
@@ -24,7 +24,7 @@ export const nodejs: InstallStep = {
     const nodeCheck = spawnSync('node', ['--version'], { stdio: 'pipe' });
     if (nodeCheck.status === 0) {
       const major = parseInt(nodeCheck.stdout.toString().trim().replace('v', '').split('.')[0], 10);
-      if (major >= 20) {
+      if (major >= 22) {
         emit(`Node.js ${nodeCheck.stdout.toString().trim()} already installed`);
         return;
       }
@@ -42,9 +42,9 @@ export const nodejs: InstallStep = {
       );
     }
 
-    // Install Node.js 20 via nvm
-    emit('Installing Node.js 20 via nvm...');
-    const nvmScript = `. "${nvmDir}/nvm.sh" && nvm install 20 && nvm use 20 && which node`;
+    // Install Node.js 22 via nvm
+    emit('Installing Node.js 22 via nvm...');
+    const nvmScript = `. "${nvmDir}/nvm.sh" && nvm install 22 && nvm use 22 && which node`;
     const result = spawnSync('/bin/bash', ['-c', nvmScript], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, NVM_DIR: nvmDir },
@@ -60,6 +60,6 @@ export const nodejs: InstallStep = {
       process.env.PATH = `${nodePath}:${process.env.PATH}`;
     }
 
-    emit('Node.js 20 installed');
+    emit('Node.js 22 installed');
   },
 };
