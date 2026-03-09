@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditableField } from '../../components/editable-field';
 import { ApprovalEditor } from '../../components/approval-editor';
@@ -57,6 +57,13 @@ export default function SettingsPage() {
   });
 
   const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
+  const [googleCredForm, setGoogleCredForm] = useState({ clientId: '', clientSecret: '', projectId: '' });
+  const [googleCredSaving, setGoogleCredSaving] = useState(false);
+  const [googleCredError, setGoogleCredError] = useState<string | null>(null);
+  const [googleCredSuccess, setGoogleCredSuccess] = useState(false);
+  const [showCredForm, setShowCredForm] = useState(false);
+  const [agentRestarting, setAgentRestarting] = useState(false);
+  const prevAuthenticatedRef = useRef<boolean | null>(null);
   const [plaudInstallLoading, setPlaudInstallLoading] = useState(false);
 
   const { data: plaudStatus, refetch: refetchPlaud } = useQuery({
@@ -73,19 +80,45 @@ export default function SettingsPage() {
     refetchInterval: 30000,
   });
 
+  const [googleFastPoll, setGoogleFastPoll] = useState(false);
+
   const { data: googleStatus, refetch: refetchGoogle } = useQuery({
     queryKey: ['google-auth'],
     queryFn: async () => {
       const res = await fetch('/api/google-auth');
-      return res.json() as Promise<{
+      const data = await res.json() as {
         installed: boolean;
         authenticated: boolean;
         email: string | null;
         error: string | null;
-      }>;
+        hasClientCredentials: boolean;
+        authInProgress: boolean;
+        authUrl: string | null;
+        authError: string | null;
+      };
+      // Update fast-polling based on auth state
+      setGoogleFastPoll(data.authInProgress);
+      return data;
     },
-    refetchInterval: 30000,
+    // Poll every 2s during auth, otherwise every 30s
+    refetchInterval: googleAuthLoading || googleFastPoll ? 2000 : 30000,
   });
+
+  // Auto-restart agent when auth completes (transition from false -> true)
+  useEffect(() => {
+    const current = googleStatus?.authenticated ?? false;
+    if (prevAuthenticatedRef.current !== null && current && !prevAuthenticatedRef.current) {
+      // Auth just completed — restart agent to pick up fresh MCP connections
+      setAgentRestarting(true);
+      setGoogleAuthLoading(false);
+      fetch('/api/agent/restart', { method: 'POST' })
+        .then(() => {
+          setTimeout(() => setAgentRestarting(false), 5000);
+        })
+        .catch(() => setAgentRestarting(false));
+    }
+    prevAuthenticatedRef.current = current;
+  }, [googleStatus?.authenticated]);
 
   const { data: avatarStatus } = useQuery({
     queryKey: ['avatar'],
@@ -232,24 +265,89 @@ export default function SettingsPage() {
             Connect your Google account to enable Gmail, Calendar, Tasks, and Drive via the Google MCP server.
           </p>
 
+          {/* Status indicator */}
           <div className="flex items-center gap-3 mb-4">
             <div className={`w-2 h-2 rounded-full ${
+              agentRestarting ? 'bg-yellow-500 animate-pulse' :
               googleStatus?.authenticated ? 'bg-green-500' :
+              googleStatus?.authInProgress ? 'bg-blue-500 animate-pulse' :
               googleStatus?.installed ? 'bg-yellow-500' :
               'bg-zinc-600'
             }`} />
             <span className="text-sm">
-              {googleStatus?.authenticated
-                ? `Connected${googleStatus.email ? ` — ${googleStatus.email}` : ''}`
-                : googleStatus?.installed
-                  ? googleStatus?.error === 'Token expired or invalid'
-                    ? 'Token expired — re-authenticate below'
-                    : 'Not authenticated'
-                  : 'gws CLI not installed'}
+              {agentRestarting
+                ? 'Restarting agent to connect Google services...'
+                : googleStatus?.authenticated
+                  ? `Connected${googleStatus.email ? ` — ${googleStatus.email}` : ''}`
+                  : googleStatus?.authInProgress
+                    ? 'Authentication in progress...'
+                    : !googleStatus?.installed
+                      ? 'gws CLI not installed'
+                      : !googleStatus?.hasClientCredentials
+                        ? 'OAuth credentials needed'
+                        : 'Not authenticated'}
             </span>
           </div>
 
-          {googleStatus?.authenticated ? (
+          {/* State: gws CLI not installed */}
+          {!googleStatus?.installed && (
+            <div className="space-y-2">
+              <p className="text-sm text-zinc-500">
+                Install the CLI first:{' '}
+                <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
+                  npm install -g @googleworkspace/cli
+                </code>
+              </p>
+              <p className="text-xs text-zinc-600">
+                Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
+              </p>
+            </div>
+          )}
+
+          {/* State: Agent restarting */}
+          {googleStatus?.installed && agentRestarting && (
+            <p className="text-sm text-zinc-400">
+              The agent is restarting to pick up the new Google connection. This happens automatically.
+            </p>
+          )}
+
+          {/* State: Auth in progress */}
+          {googleStatus?.installed && !agentRestarting && googleStatus?.authInProgress && (
+            <div className="space-y-3">
+              {googleStatus.authUrl ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-zinc-300">
+                    Complete authorization in your browser. If it didn&apos;t open automatically, click the link below:
+                  </p>
+                  <a
+                    href={googleStatus.authUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-400 hover:text-blue-300 underline break-all block"
+                  >
+                    Open Google Authorization
+                  </a>
+                </div>
+              ) : googleStatus.authError ? (
+                <p className="text-sm text-red-400">{googleStatus.authError}</p>
+              ) : (
+                <p className="text-sm text-zinc-400">Starting authentication...</p>
+              )}
+              <button
+                onClick={async () => {
+                  await fetch('/api/google-auth', { method: 'DELETE' });
+                  setGoogleAuthLoading(false);
+                  await refetchGoogle();
+                }}
+                className="text-sm text-zinc-500 hover:text-red-400 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* State: Authenticated */}
+          {googleStatus?.installed && !agentRestarting && !googleStatus?.authInProgress && googleStatus?.authenticated && (
             <div className="space-y-3">
               <div className="text-sm text-zinc-400">
                 <p className="font-medium text-zinc-300 mb-2">Available services:</p>
@@ -260,51 +358,165 @@ export default function SettingsPage() {
                   <li>Drive — search, read, and manage files</li>
                 </ul>
               </div>
-              <button
-                onClick={async () => {
-                  setGoogleAuthLoading(true);
-                  try {
-                    await fetch('/api/google-auth', { method: 'POST' });
-                    await refetchGoogle();
-                  } finally {
-                    setGoogleAuthLoading(false);
-                  }
-                }}
-                disabled={googleAuthLoading}
-                className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                {googleAuthLoading ? 'Re-authenticating...' : 'Re-authenticate'}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {googleStatus?.installed ? (
+              <div className="flex items-center gap-4">
                 <button
                   onClick={async () => {
                     setGoogleAuthLoading(true);
-                    try {
-                      await fetch('/api/google-auth', { method: 'POST' });
-                      await refetchGoogle();
-                    } finally {
-                      setGoogleAuthLoading(false);
-                    }
+                    const res = await fetch('/api/google-auth', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.error) setGoogleAuthLoading(false);
+                    await refetchGoogle();
                   }}
                   disabled={googleAuthLoading}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
+                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  {googleAuthLoading ? 'Connecting...' : 'Connect Google Account'}
+                  {googleAuthLoading ? 'Starting...' : 'Re-authenticate'}
                 </button>
+                <button
+                  onClick={() => setShowCredForm(!showCredForm)}
+                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Change OAuth Credentials
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* State: Has CLI, not authenticated, no auth in progress */}
+          {googleStatus?.installed && !agentRestarting && !googleStatus?.authInProgress && !googleStatus?.authenticated && (
+            <div className="space-y-3">
+              {googleStatus?.hasClientCredentials ? (
+                <>
+                  <button
+                    onClick={async () => {
+                      setGoogleAuthLoading(true);
+                      const res = await fetch('/api/google-auth', { method: 'POST' });
+                      const data = await res.json();
+                      if (data.error) setGoogleAuthLoading(false);
+                      await refetchGoogle();
+                    }}
+                    disabled={googleAuthLoading}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
+                  >
+                    {googleAuthLoading ? 'Starting...' : 'Connect Google Account'}
+                  </button>
+                  <button
+                    onClick={() => setShowCredForm(!showCredForm)}
+                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors block"
+                  >
+                    Change OAuth Credentials
+                  </button>
+                </>
               ) : (
-                <p className="text-sm text-zinc-500">
-                  Install the CLI first:{' '}
-                  <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
-                    npm install -g @googleworkspace/cli
-                  </code>
+                <p className="text-sm text-zinc-400">
+                  Set up your OAuth credentials below to get started.
                 </p>
               )}
               <p className="text-xs text-zinc-600">
                 Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
               </p>
+            </div>
+          )}
+
+          {/* Credential form — shown when no credentials exist or user clicks "Change" */}
+          {googleStatus?.installed && !agentRestarting && (showCredForm || (googleStatus && !googleStatus.hasClientCredentials && !googleStatus.authInProgress)) && (
+            <div className="mt-4 pt-4 border-t border-zinc-800/50">
+              <h4 className="text-sm font-medium text-zinc-300 mb-3">OAuth Credentials</h4>
+              <p className="text-xs text-zinc-500 mb-3">
+                Create an OAuth client in the{' '}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300"
+                >
+                  Google Cloud Console
+                </a>
+                {' '}(Desktop app type). Enable the Gmail, Calendar, Tasks, Drive, Sheets, Docs, and Slides APIs.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Client ID</label>
+                  <input
+                    type="text"
+                    value={googleCredForm.clientId}
+                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, clientId: e.target.value }))}
+                    placeholder="123456789.apps.googleusercontent.com"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Client Secret</label>
+                  <input
+                    type="password"
+                    value={googleCredForm.clientSecret}
+                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, clientSecret: e.target.value }))}
+                    placeholder="GOCSPX-..."
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Project ID <span className="text-zinc-600">(optional)</span></label>
+                  <input
+                    type="text"
+                    value={googleCredForm.projectId}
+                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, projectId: e.target.value }))}
+                    placeholder="my-project-123"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+                {googleCredError && (
+                  <p className="text-sm text-red-400">{googleCredError}</p>
+                )}
+                {googleCredSuccess && (
+                  <p className="text-sm text-green-400">Credentials saved. You can now connect your Google account.</p>
+                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      setGoogleCredSaving(true);
+                      setGoogleCredError(null);
+                      setGoogleCredSuccess(false);
+                      try {
+                        const res = await fetch('/api/google-auth', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(googleCredForm),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                          setGoogleCredError(data.error || 'Failed to save');
+                        } else {
+                          setGoogleCredSuccess(true);
+                          setGoogleCredForm({ clientId: '', clientSecret: '', projectId: '' });
+                          setShowCredForm(false);
+                          await refetchGoogle();
+                        }
+                      } catch {
+                        setGoogleCredError('Failed to save credentials');
+                      } finally {
+                        setGoogleCredSaving(false);
+                      }
+                    }}
+                    disabled={googleCredSaving || !googleCredForm.clientId || !googleCredForm.clientSecret}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-1.5 rounded text-sm transition-colors"
+                  >
+                    {googleCredSaving ? 'Saving...' : 'Save Credentials'}
+                  </button>
+                  {showCredForm && (
+                    <button
+                      onClick={() => {
+                        setShowCredForm(false);
+                        setGoogleCredError(null);
+                        setGoogleCredSuccess(false);
+                      }}
+                      className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
