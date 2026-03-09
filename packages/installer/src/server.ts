@@ -2,7 +2,7 @@ import express from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_STEPS, getStep } from './steps/index.js';
-import { startAgent, isRunning, AGENT_LABEL } from './launchctl.js';
+import { startAgent, stopAgent, isRunning, AGENT_LABEL } from './launchctl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WIZARD_UI_DIR = join(__dirname, 'wizard-ui');
@@ -301,6 +301,18 @@ app.get('/api/agent-status', (_req, res) => {
   res.json({
     running: isRunning(AGENT_LABEL),
   });
+});
+
+// Restart agent (e.g. after granting FDA)
+app.post('/api/restart-agent', (_req, res) => {
+  if (isRunning(AGENT_LABEL)) {
+    stopAgent(AGENT_LABEL);
+    // KeepAlive will restart it automatically
+    res.json({ restarted: true });
+  } else {
+    startAgent(AGENT_LABEL);
+    res.json({ restarted: true });
+  }
 });
 
 // --- Start server ---

@@ -14,6 +14,8 @@ function showScreen(name) {
     connectLogStream();
   }
   if (name === 'verify') {
+    loadNodePath();
+    checkNodeFda();
     runVerification();
   }
 }
@@ -81,19 +83,25 @@ async function checkNodeFda() {
     const data = await res.json();
     if (data.granted) {
       nodeFdaGranted = true;
-      statusEl.textContent = '✓ Granted';
+      statusEl.textContent = '✓ Granted — restarting agent...';
       statusEl.className = 'perm-status granted';
+      // Restart the agent so it picks up the new FDA grant
+      try {
+        await fetch('/api/restart-agent', { method: 'POST' });
+        statusEl.textContent = '✓ Granted — agent restarted';
+      } catch {
+        statusEl.textContent = '✓ Granted';
+      }
     } else {
       nodeFdaGranted = false;
-      statusEl.textContent = '✗ Not granted — configure after install';
+      statusEl.textContent = '✗ Not granted';
       statusEl.className = 'perm-status not-granted';
     }
   } catch {
     nodeFdaGranted = false;
-    statusEl.textContent = 'Check failed — configure after install';
+    statusEl.textContent = 'Check failed';
     statusEl.className = 'perm-status not-granted';
   }
-  updatePrereqButton();
 }
 
 async function loadNodePath() {
@@ -107,8 +115,7 @@ async function loadNodePath() {
   } catch { /* ignore */ }
 }
 
-// Load the node path on page init
-loadNodePath();
+// Node path is loaded when entering the verify screen (after MurphNode.app is created)
 
 // --- Steps ---
 

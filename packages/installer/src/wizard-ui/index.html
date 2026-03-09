@@ -51,32 +51,6 @@
         </div>
 
         <div class="permission-card" style="margin-top: 1.5rem">
-          <h3>Full Disk Access</h3>
-          <p>
-            Murph needs Full Disk Access to read the iMessage database.
-            Because the agent runs via LaunchAgent, the <strong>MurphNode</strong> app
-            needs FDA — not your terminal app.
-          </p>
-          <ol>
-            <li>Click <strong>Open Settings</strong> below</li>
-            <li>
-              Click the <strong>+</strong> button and add the <strong>MurphNode</strong> app:<br />
-              <code id="node-path-display" style="user-select: all; font-size: 0.9em;">~/murph/MurphNode.app</code>
-            </li>
-            <li>Toggle the switch <strong>ON</strong></li>
-            <li>Click <strong>Verify</strong> to confirm access</li>
-          </ol>
-          <div class="btn-row" style="justify-content: flex-start; gap: 0.5rem;">
-            <button class="btn small" onclick="openFdaSettings()">Open Settings</button>
-            <button class="btn small" onclick="checkNodeFda()">Verify</button>
-            <span id="node-fda-status" class="perm-status"></span>
-          </div>
-          <p style="margin-top: 0.5rem; font-size: 0.85em; color: var(--text-dim);">
-            Recommended but not required to continue. iMessage features won't work until FDA is granted.
-          </p>
-        </div>
-
-        <div class="permission-card">
           <h3>Accessibility</h3>
           <p>
             Murph needs Accessibility access to send iMessages via AppleScript.
@@ -152,6 +126,33 @@
         <h2>Verification</h2>
         <p class="description">Running final health checks...</p>
         <div id="verify-results" class="verify-results"></div>
+
+        <div class="permission-card" style="margin-top: 1.5rem">
+          <h3>Full Disk Access</h3>
+          <p>
+            Murph needs Full Disk Access to read the iMessage database.
+            Because the agent runs via LaunchAgent, the <strong>MurphNode</strong> app
+            needs FDA — not your terminal app.
+          </p>
+          <ol>
+            <li>Click <strong>Open Settings</strong> below</li>
+            <li>
+              Click the <strong>+</strong> button and add the <strong>MurphNode</strong> app:<br />
+              <code id="node-path-display" style="user-select: all; font-size: 0.9em;">~/murph/MurphNode.app</code>
+            </li>
+            <li>Toggle the switch <strong>ON</strong></li>
+            <li>Click <strong>Verify</strong> to confirm access</li>
+          </ol>
+          <div class="btn-row" style="justify-content: flex-start; gap: 0.5rem;">
+            <button class="btn small" onclick="openFdaSettings()">Open Settings</button>
+            <button class="btn small" onclick="checkNodeFda()">Verify</button>
+            <span id="node-fda-status" class="perm-status"></span>
+          </div>
+          <p style="margin-top: 0.5rem; font-size: 0.85em; color: var(--text-dim);">
+            iMessage features won't work until FDA is granted. After granting, the agent will be restarted automatically.
+          </p>
+        </div>
+
         <div class="btn-row">
           <button class="btn secondary" onclick="showScreen('install')">
             Back
