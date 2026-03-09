@@ -161,7 +161,7 @@ export class IMessageChannel {
         }
 
         // Enforce sender allowlist (empty = allow all)
-        if (this.allowedSenders.size > 0 && !this.allowedSenders.has(message.sender.toLowerCase())) {
+        if (!this.allowedSenders.has(message.sender.toLowerCase())) {
           // Check for an active outbound grant
           if (this.config.checkOutboundGrant) {
             const grant = await this.config.checkOutboundGrant(message.sender);
