@@ -132,8 +132,13 @@ echo "pnpm: $(pnpm --version)"
 # --- 5. Extract payload to ~/murph ---
 # The installer wizard steps will handle this via the extract-payload step,
 # but we also extract the installer's own dist here so the wizard can run.
+# Clean existing install to prevent stale files from persisting.
 if [ -f "$RESOURCES_DIR/murph-payload.tar.gz" ]; then
   echo "Extracting Murph to $INSTALL_DIR..."
+  if [ -d "$INSTALL_DIR/packages" ]; then
+    echo "Removing old packages directory..."
+    rm -rf "$INSTALL_DIR/packages"
+  fi
   mkdir -p "$INSTALL_DIR"
   tar xzf "$RESOURCES_DIR/murph-payload.tar.gz" -C "$INSTALL_DIR"
   echo "Extraction complete"
