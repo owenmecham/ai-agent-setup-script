@@ -22,7 +22,7 @@ echo "=== Murph Installer started at $(date) ==="
 # --- Bootstrap PATH ---
 # .app bundles launch with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
 # We must set up the full PATH before any `command -v` checks.
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/Library/pnpm:$HOME/.local/bin:/opt/homebrew/opt/postgresql@16/bin"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/Library/pnpm:$HOME/.local/bin:$HOME/.claude/bin:/opt/homebrew/opt/postgresql@16/bin"
 
 # Add Homebrew shellenv if available
 if [ -x /opt/homebrew/bin/brew ]; then

@@ -14,9 +14,9 @@ PAYLOAD_DIR="$BUILD_DIR/payload"
 
 echo "=== Building release payload ==="
 
-# --- 1. Build everything first ---
+# --- 1. Build everything first (--force to skip turbo cache) ---
 echo "Building all packages..."
-(cd "$REPO_ROOT" && pnpm build)
+(cd "$REPO_ROOT" && pnpm build --force)
 
 # --- 2. Assemble payload directory ---
 echo "Assembling payload..."
