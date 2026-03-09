@@ -103,8 +103,8 @@ export async function POST() {
   cleanupAuthProcess();
 
   try {
-    const proc = spawn('uvx', ['workspace-mcp', '--transport', 'streamable-http', '--port', '9876', '--single-user', '--tool-tier', 'core'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const proc = spawn('uvx', ['workspace-mcp', '--single-user', '--tool-tier', 'core'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
     });
 
@@ -115,6 +115,32 @@ export async function POST() {
       startedAt: Date.now(),
       pollTimer: null,
     };
+
+    // Send MCP initialize + tool call to trigger OAuth flow (stdio = newline-delimited JSON-RPC)
+    const sendJsonRpc = (msg: object) => {
+      const json = JSON.stringify(msg);
+      try { proc.stdin?.write(json + '\n'); } catch {}
+    };
+
+    setTimeout(() => {
+      sendJsonRpc({
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'murph-dashboard-auth', version: '1.0.0' },
+        },
+      });
+      setTimeout(() => {
+        sendJsonRpc({ jsonrpc: '2.0', method: 'notifications/initialized' });
+        setTimeout(() => {
+          sendJsonRpc({
+            jsonrpc: '2.0', id: 2, method: 'tools/call',
+            params: { name: 'list_labels', arguments: {} },
+          });
+        }, 500);
+      }, 1000);
+    }, 3000);
 
     // Poll for credential files — kill server once auth completes
     const credPoll = setInterval(() => {

@@ -724,8 +724,7 @@ async function main() {
 
         const sendJsonRpc = (msg: object) => {
           const json = JSON.stringify(msg);
-          const payload = `Content-Length: ${Buffer.byteLength(json)}\r\n\r\n${json}`;
-          try { authProc.stdin?.write(payload); } catch {}
+          try { authProc.stdin?.write(json + '\n'); } catch {}
         };
 
         // MCP initialize
