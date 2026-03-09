@@ -95,8 +95,10 @@ export function buildAgentPlist(murphDir: string): string {
   }
 
   // Build a PATH that includes all common locations for nvm, Homebrew, pnpm, etc.
+  const stableNodeDir = join(home, 'murph', 'bin');
   const pathParts = [
     join(murphDir, 'node_modules', '.bin'), // project-local binaries (tsx, etc.)
+    stableNodeDir, // stable copy for FDA compatibility
     join(home, '.nvm/versions/node') + '/v20*/bin', // will be resolved below
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
@@ -115,7 +117,7 @@ export function buildAgentPlist(murphDir: string): string {
   try {
     const nodeRealpath = execSync('which node', { encoding: 'utf-8' }).trim();
     const nodeDir = nodeRealpath.replace(/\/node$/, '');
-    pathParts[1] = nodeDir;
+    pathParts[2] = nodeDir;
     nodeBinDir = nodeDir;
   } catch {
     // Fallback: try to find nvm's current node
@@ -124,19 +126,24 @@ export function buildAgentPlist(murphDir: string): string {
         'bash -c "source ~/.nvm/nvm.sh && which node"',
         { encoding: 'utf-8' },
       ).trim().replace(/\/node$/, '');
-      pathParts[1] = nvmNodeDir;
+      pathParts[2] = nvmNodeDir;
       nodeBinDir = nvmNodeDir;
     } catch {
-      pathParts[1] = '/usr/local/bin';
+      pathParts[2] = '/usr/local/bin';
     }
   }
 
-  // Find node path
+  // Prefer stable copy at ~/murph/bin/node for FDA compatibility
+  const stableNode = join(home, 'murph', 'bin', 'node');
   let nodePath: string;
-  try {
-    nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
-  } catch {
-    nodePath = join(nodeBinDir, 'node');
+  if (existsSync(stableNode)) {
+    nodePath = stableNode;
+  } else {
+    try {
+      nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+    } catch {
+      nodePath = join(nodeBinDir, 'node');
+    }
   }
 
   const fullPath = pathParts.join(':');

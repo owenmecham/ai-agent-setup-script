@@ -290,6 +290,13 @@ ZSHRC
   fi
 fi
 
+# 6a. Copy node to stable path for Full Disk Access compatibility
+check "Stable node binary (~/murph/bin/node)"
+mkdir -p "$HOME/murph/bin"
+cp "$(which node)" "$HOME/murph/bin/node"
+chmod +x "$HOME/murph/bin/node"
+ok
+
 # 6. pnpm
 check "pnpm"
 if command -v pnpm &>/dev/null; then

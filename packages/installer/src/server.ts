@@ -39,7 +39,7 @@ for (const step of ALL_STEPS) {
 // --- Full Disk Access helpers ---
 
 import { spawnSync, execSync } from 'node:child_process';
-import { accessSync, constants } from 'node:fs';
+import { accessSync, constants, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 app.post('/api/open-fda-settings', (_req, res) => {
@@ -47,8 +47,13 @@ app.post('/api/open-fda-settings', (_req, res) => {
   res.json({ opened: true });
 });
 
-// Return the detected node binary path
+// Return the detected node binary path (prefer stable copy for FDA)
 app.get('/api/node-path', (_req, res) => {
+  const stableNode = join(homedir(), 'murph', 'bin', 'node');
+  if (existsSync(stableNode)) {
+    res.json({ nodePath: stableNode });
+    return;
+  }
   let nodePath = 'node';
   try {
     nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
@@ -60,11 +65,16 @@ app.get('/api/node-path', (_req, res) => {
 
 // Check whether the node process can read ~/Library/Messages/chat.db (FDA proxy)
 app.get('/api/check-node-fda', (_req, res) => {
-  let nodePath = 'node';
-  try {
-    nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
-  } catch {
-    nodePath = '/usr/local/bin/node';
+  const stableNode = join(homedir(), 'murph', 'bin', 'node');
+  let nodePath: string;
+  if (existsSync(stableNode)) {
+    nodePath = stableNode;
+  } else {
+    try {
+      nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+    } catch {
+      nodePath = '/usr/local/bin/node';
+    }
   }
 
   const chatDbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
