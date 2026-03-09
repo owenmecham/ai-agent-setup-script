@@ -162,7 +162,7 @@ if [ -n "$PNPM_WANT" ] && [ "$PNPM_WANT" != "$PNPM_HAVE" ]; then
 fi
 
 echo "Installing installer dependencies..."
-pnpm install --filter @murph/installer --prod 2>&1 || true
+CI=true pnpm install --filter @murph/installer --prod 2>&1 || true
 
 echo "Starting install wizard server..."
 node packages/installer/dist/server.js &
