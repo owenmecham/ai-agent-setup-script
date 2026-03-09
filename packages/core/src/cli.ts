@@ -660,41 +660,13 @@ async function main() {
       process.env.GOOGLE_OAUTH_CLIENT_ID = clientId;
       process.env.GOOGLE_OAUTH_CLIENT_SECRET = clientSecret;
 
-      // 4. Run workspace-mcp to trigger OAuth browser flow
-      // workspace-mcp is a long-running MCP server — we spawn it async,
-      // wait for credentials to appear on disk, then kill it.
-      console.log('');
-      console.log('Starting workspace-mcp for OAuth authorization...');
-      console.log('A browser window will open for you to authorize access.');
-      console.log('');
-
+      // 4. Run workspace-mcp in HTTP mode to trigger OAuth browser flow.
+      // In stdio mode workspace-mcp just waits for JSON-RPC — no OAuth prompt.
+      // HTTP mode starts an OAuth callback server that handles the browser flow.
       const { spawn: spawnAsync } = await import('node:child_process');
       const { readdirSync } = await import('node:fs');
       const credDir = `${home}/.google_workspace_mcp/credentials`;
-      const authProc = spawnAsync('uvx', ['workspace-mcp', '--tool-tier', 'core'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret },
-      });
 
-      // Print stderr to console so user can see OAuth URL if browser doesn't open
-      authProc.stderr?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        // Auto-open OAuth URLs in browser
-        const urlMatch = text.match(/https:\/\/accounts\.google\.com[^\s]+/);
-        if (urlMatch) {
-          try { spawnAsync('open', [urlMatch[0]], { stdio: 'ignore', detached: true }).unref(); } catch {}
-        }
-        process.stderr.write(text);
-      });
-      authProc.stdout?.on('data', (chunk: Buffer) => {
-        const text = chunk.toString();
-        const urlMatch = text.match(/https:\/\/accounts\.google\.com[^\s]+/);
-        if (urlMatch) {
-          try { spawnAsync('open', [urlMatch[0]], { stdio: 'ignore', detached: true }).unref(); } catch {}
-        }
-      });
-
-      // Poll for credential files to appear (max 2 minutes)
       const hasCredFiles = (): boolean => {
         try {
           const files = readdirSync(credDir);
@@ -702,9 +674,51 @@ async function main() {
         } catch { return false; }
       };
 
+      // Pick a port for the OAuth callback server
+      const authPort = '9876';
+      console.log('');
+      console.log('Starting workspace-mcp OAuth server...');
+      console.log(`Open http://localhost:${authPort} in your browser to authorize.`);
+      console.log('');
+
+      const authProc = spawnAsync('uvx', [
+        'workspace-mcp', '--transport', 'http', '--port', authPort, '--tool-tier', 'core',
+      ], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret },
+      });
+
+      // Wait for the server to be ready, then open the browser
+      let serverReady = false;
+      const handleOutput = (chunk: Buffer) => {
+        const text = chunk.toString();
+        process.stderr.write(text);
+        // Auto-open browser once server is listening
+        if (!serverReady && (text.includes('OAuth server') || text.includes('Started') || text.includes('localhost'))) {
+          serverReady = true;
+          try { spawnAsync('open', [`http://localhost:${authPort}`], { stdio: 'ignore', detached: true }).unref(); } catch {}
+        }
+        // Also catch direct Google OAuth URLs
+        const urlMatch = text.match(/https:\/\/accounts\.google\.com[^\s]+/);
+        if (urlMatch) {
+          try { spawnAsync('open', [urlMatch[0]], { stdio: 'ignore', detached: true }).unref(); } catch {}
+        }
+      };
+      authProc.stderr?.on('data', handleOutput);
+      authProc.stdout?.on('data', handleOutput);
+
+      // If server doesn't auto-open, give it 5 seconds then try anyway
+      setTimeout(() => {
+        if (!serverReady) {
+          serverReady = true;
+          try { spawnAsync('open', [`http://localhost:${authPort}`], { stdio: 'ignore', detached: true }).unref(); } catch {}
+        }
+      }, 5000);
+
+      // Poll for credential files to appear (max 3 minutes)
       const alreadyHadCreds = hasCredFiles();
       let authSuccess = false;
-      for (let i = 0; i < 120; i++) {
+      for (let i = 0; i < 180; i++) {
         await new Promise(r => setTimeout(r, 1000));
         if (hasCredFiles() && (!alreadyHadCreds || i > 5)) {
           authSuccess = true;
@@ -712,7 +726,7 @@ async function main() {
         }
       }
 
-      // Kill the MCP server process
+      // Kill the HTTP server
       try { authProc.kill(); } catch {}
 
       console.log('');
@@ -722,7 +736,8 @@ async function main() {
         console.log('✓ Google Workspace credentials found.');
       } else {
         console.log('! Could not verify credentials at ~/.google_workspace_mcp/credentials/');
-        console.log('  The OAuth flow may not have completed. Try again: pnpm murph google-auth');
+        console.log('  Try opening http://localhost:' + authPort + ' manually if the browser didn\'t open.');
+        console.log('  Or re-run: pnpm murph google-auth');
       }
 
       console.log('');
