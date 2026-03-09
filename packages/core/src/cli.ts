@@ -577,10 +577,11 @@ async function main() {
 
       // 2. Prompt for OAuth credentials
       console.log('');
-      console.log('You need a Google Cloud OAuth 2.0 Desktop client.');
+      console.log('You need a Google Cloud OAuth 2.0 Web Application client.');
       console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
-      console.log('  2. Create an OAuth 2.0 Client ID (type: Desktop app)');
-      console.log('  3. Enable these APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides');
+      console.log('  2. Create an OAuth 2.0 Client ID (type: Web application)');
+      console.log('  3. Under "Authorized redirect URIs", add: http://localhost:8000/oauth2callback');
+      console.log('  4. Enable these APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides');
       console.log('');
 
       const rl = createInterface({ input: process.stdin, output: process.stdout });

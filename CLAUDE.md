@@ -82,7 +82,7 @@ Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Forms, Ch
 
 **Requirements:**
 - `uv` Python package manager (installed via `brew install uv`)
-- Google Cloud OAuth 2.0 Desktop credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars)
+- Google Cloud OAuth 2.0 **Web Application** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars) — the credential must have `http://localhost:8000/oauth2callback` as an authorized redirect URI
 
 **Setup:** `pnpm murph google-auth` — prompts for Google OAuth Client ID and Secret, stores them in `~/.zshrc`, and runs `uvx workspace-mcp` to complete browser-based OAuth. Can also be triggered from the dashboard Settings page.
 
