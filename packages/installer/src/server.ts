@@ -3,7 +3,6 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_STEPS, getStep } from './steps/index.js';
 import { startAgent, isRunning, AGENT_LABEL } from './launchctl.js';
-import { ensureStableNode } from './steps/stabilize-node.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WIZARD_UI_DIR = join(__dirname, 'wizard-ui');
@@ -52,11 +51,10 @@ app.post('/api/open-fda-settings', (_req, res) => {
   res.json({ opened: true });
 });
 
-// Return the detected node binary path (prefer stable copy for FDA)
+// Return the detected node binary path (prefer /usr/local/bin/node for FDA)
 app.get('/api/node-path', (_req, res) => {
-  const stableNode = join(homedir(), 'murph', 'bin', 'node');
-  if (existsSync(stableNode)) {
-    res.json({ nodePath: stableNode });
+  if (existsSync('/usr/local/bin/node')) {
+    res.json({ nodePath: '/usr/local/bin/node' });
     return;
   }
   let nodePath = 'node';
@@ -68,12 +66,11 @@ app.get('/api/node-path', (_req, res) => {
   res.json({ nodePath });
 });
 
-// Check whether the stable node binary can read ~/Library/Messages/chat.db (FDA proxy)
+// Check whether the node binary can read ~/Library/Messages/chat.db (FDA proxy)
 app.get('/api/check-node-fda', (_req, res) => {
-  const stableNode = join(homedir(), 'murph', 'bin', 'node');
   let nodePath: string;
-  if (existsSync(stableNode)) {
-    nodePath = stableNode;
+  if (existsSync('/usr/local/bin/node')) {
+    nodePath = '/usr/local/bin/node';
   } else {
     try {
       nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
@@ -299,9 +296,6 @@ app.get('/api/agent-status', (_req, res) => {
 });
 
 // --- Start server ---
-
-// Ensure ~/murph/bin/node exists before the prerequisites page loads
-ensureStableNode();
 
 const PORT = parseInt(process.env.INSTALLER_PORT ?? '3142', 10);
 

@@ -31,12 +31,6 @@ elif [ -x /usr/local/bin/brew ]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
-# Source nvm if available
-export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  \. "$NVM_DIR/nvm.sh"
-fi
-
 # Add pnpm home
 export PNPM_HOME="$HOME/Library/pnpm"
 mkdir -p "$PNPM_HOME"
@@ -115,18 +109,16 @@ if ! command -v brew &>/dev/null; then
 fi
 echo "Homebrew: $(brew --version | head -1)"
 
-# --- 3. Node.js via nvm ---
-if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-  echo "Installing nvm..."
-  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-  \. "$NVM_DIR/nvm.sh"
-fi
-
+# --- 3. Node.js via official .pkg installer ---
 NODE_MAJOR=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
-if [ "$NODE_MAJOR" -lt 20 ]; then
-  echo "Installing Node.js 20..."
-  nvm install 20
-  nvm use 20
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  echo "Installing Node.js..."
+  NODE_VERSION="v22.15.0"
+  PKG_URL="https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.pkg"
+  PKG_PATH="/tmp/node-${NODE_VERSION}.pkg"
+  curl -fsSL "$PKG_URL" -o "$PKG_PATH"
+  osascript -e "do shell script \"installer -pkg '${PKG_PATH}' -target /\" with administrator privileges"
+  rm -f "$PKG_PATH"
 fi
 echo "Node: $(node --version)"
 

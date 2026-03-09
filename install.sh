@@ -258,44 +258,22 @@ ok
 # Change to install directory for remaining steps
 cd "$INSTALL_DIR"
 
-# 6. Node.js (via nvm)
-check "Node.js 20+"
+# 6. Node.js (official .pkg installer)
+check "Node.js 22+"
 NODE_MAJOR=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
-if [[ "$NODE_MAJOR" -ge 20 ]]; then
+if [[ "$NODE_MAJOR" -ge 22 ]]; then
   skip
 else
   installing
-  if ! command -v nvm &>/dev/null; then
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-  fi
-  nvm install 20
-  nvm use 20
+  NODE_VERSION="v22.15.0"
+  curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}.pkg" -o "/tmp/node-${NODE_VERSION}.pkg"
+  sudo installer -pkg "/tmp/node-${NODE_VERSION}.pkg" -target /
+  rm -f "/tmp/node-${NODE_VERSION}.pkg"
   ok
 fi
 
-# Ensure ~/.zshrc exists and has nvm init (macOS defaults to zsh)
-if [ -n "${NVM_DIR:-}" ] || [ -d "$HOME/.nvm" ]; then
-  NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  touch "$HOME/.zshrc"
-  if ! grep -q 'NVM_DIR' "$HOME/.zshrc" 2>/dev/null; then
-    cat >> "$HOME/.zshrc" <<'ZSHRC'
-
-# nvm
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-ZSHRC
-  fi
-fi
-
-# 6a. Copy node to stable path for Full Disk Access compatibility
-check "Stable node binary (~/murph/bin/node)"
-mkdir -p "$HOME/murph/bin"
-cp "$(which node)" "$HOME/murph/bin/node"
-chmod +x "$HOME/murph/bin/node"
-ok
+# Clean up legacy ~/murph/bin/node from previous NVM-based installs
+[ -f "$HOME/murph/bin/node" ] && rm -f "$HOME/murph/bin/node"
 
 # 6. pnpm
 check "pnpm"

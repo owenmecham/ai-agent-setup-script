@@ -94,15 +94,12 @@ export function buildAgentPlist(murphDir: string): string {
     mkdirSync(logDir, { recursive: true });
   }
 
-  // Build a PATH that includes all common locations for nvm, Homebrew, pnpm, etc.
-  const stableNodeDir = join(home, 'murph', 'bin');
+  // Build a PATH that includes all common locations for Homebrew, pnpm, etc.
   const pathParts = [
     join(murphDir, 'node_modules', '.bin'), // project-local binaries (tsx, etc.)
-    stableNodeDir, // stable copy for FDA compatibility
-    join(home, '.nvm/versions/node') + '/v20*/bin', // will be resolved below
+    '/usr/local/bin',
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
-    '/usr/local/bin',
     '/usr/bin',
     '/bin',
     '/usr/sbin',
@@ -112,39 +109,8 @@ export function buildAgentPlist(murphDir: string): string {
     '/opt/homebrew/opt/postgresql@16/bin',
   ];
 
-  // Resolve the actual node version path
-  let nodeBinDir = '/usr/local/bin';
-  try {
-    const nodeRealpath = execSync('which node', { encoding: 'utf-8' }).trim();
-    const nodeDir = nodeRealpath.replace(/\/node$/, '');
-    pathParts[2] = nodeDir;
-    nodeBinDir = nodeDir;
-  } catch {
-    // Fallback: try to find nvm's current node
-    try {
-      const nvmNodeDir = execSync(
-        'bash -c "source ~/.nvm/nvm.sh && which node"',
-        { encoding: 'utf-8' },
-      ).trim().replace(/\/node$/, '');
-      pathParts[2] = nvmNodeDir;
-      nodeBinDir = nvmNodeDir;
-    } catch {
-      pathParts[2] = '/usr/local/bin';
-    }
-  }
-
-  // Prefer stable copy at ~/murph/bin/node for FDA compatibility
-  const stableNode = join(home, 'murph', 'bin', 'node');
-  let nodePath: string;
-  if (existsSync(stableNode)) {
-    nodePath = stableNode;
-  } else {
-    try {
-      nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
-    } catch {
-      nodePath = join(nodeBinDir, 'node');
-    }
-  }
+  // Node.js is installed to /usr/local/bin by the official .pkg installer
+  const nodePath = '/usr/local/bin/node';
 
   const fullPath = pathParts.join(':');
 
@@ -207,8 +173,6 @@ export function buildAgentPlist(murphDir: string): string {
     <string>${fullPath}</string>
     <key>HOME</key>
     <string>${home}</string>
-    <key>NVM_DIR</key>
-    <string>${home}/.nvm</string>
     <key>PNPM_HOME</key>
     <string>${home}/Library/pnpm</string>${claudeEnvEntries}
   </dict>
