@@ -281,8 +281,8 @@ if command -v pnpm &>/dev/null; then
   skip
 else
   installing
-  corepack enable
-  corepack prepare pnpm@latest --activate
+  sudo corepack enable
+  sudo corepack prepare pnpm@latest --activate
   ok
 fi
 

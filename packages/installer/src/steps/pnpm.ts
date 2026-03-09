@@ -3,7 +3,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { mkdirSync, existsSync } from 'node:fs';
 import type { InstallStep } from './index.js';
-import { runCommand } from '../util.js';
 
 export const pnpmStep: InstallStep = {
   name: 'pnpm',
@@ -23,9 +22,15 @@ export const pnpmStep: InstallStep = {
       return;
     }
 
-    emit('Enabling corepack and installing pnpm...');
-    await runCommand('corepack', ['enable'], emit);
-    await runCommand('corepack', ['prepare', 'pnpm@latest', '--activate'], emit);
+    emit('Enabling corepack and installing pnpm (admin privileges required)...');
+    const result = spawnSync('osascript', [
+      '-e',
+      'do shell script "corepack enable && corepack prepare pnpm@latest --activate" with administrator privileges',
+    ], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+    if (result.status !== 0) {
+      const stderr = result.stderr?.toString().trim() || 'unknown error';
+      throw new Error(`corepack setup failed: ${stderr}`);
+    }
 
     // Ensure pnpm global bin directory exists
     const pnpmHome = join(homedir(), 'Library', 'pnpm');

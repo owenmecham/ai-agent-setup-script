@@ -125,8 +125,7 @@ echo "Node: $(node --version)"
 # --- 4. pnpm ---
 if ! command -v pnpm &>/dev/null; then
   echo "Installing pnpm..."
-  corepack enable
-  corepack prepare pnpm@latest --activate
+  osascript -e 'do shell script "corepack enable && corepack prepare pnpm@latest --activate" with administrator privileges'
 fi
 echo "pnpm: $(pnpm --version)"
 
