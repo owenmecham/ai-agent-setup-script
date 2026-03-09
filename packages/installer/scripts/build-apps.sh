@@ -53,6 +53,7 @@ MURPH_APP="$BUILD_DIR/Murph.app"
 mkdir -p "$MURPH_APP/Contents/MacOS"
 mkdir -p "$MURPH_APP/Contents/Resources"
 
+
 # Create the Murph.app launcher script
 cat > "$MURPH_APP/Contents/MacOS/murph" << 'LAUNCHER'
 #!/usr/bin/env bash

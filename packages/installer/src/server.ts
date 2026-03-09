@@ -44,8 +44,9 @@ import { accessSync, constants } from 'node:fs';
 
 function checkFullDiskAccess(): boolean {
   try {
-    const chatDbPath = `${homedir()}/Library/Messages/chat.db`;
-    accessSync(chatDbPath, constants.R_OK);
+    // Reading the TCC directory itself works if FDA is granted
+    const tccDir = `${homedir()}/Library/Application Support/com.apple.TCC`;
+    accessSync(tccDir, constants.R_OK | constants.X_OK);
     return true;
   } catch {
     return false;
