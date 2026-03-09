@@ -32,6 +32,11 @@ cp "$REPO_ROOT/murph.config.yaml" "$PAYLOAD_DIR/murph.config.yaml.template"
 # Migrate script — runs via node --experimental-strip-types at install time
 cp "$REPO_ROOT/scripts/migrate.ts" "$PAYLOAD_DIR/scripts/"
 
+# Config files (scopes, etc.)
+if [ -d "$REPO_ROOT/config" ]; then
+  cp -R "$REPO_ROOT/config" "$PAYLOAD_DIR/"
+fi
+
 # --- Copy each package: package.json + dist/ ---
 copy_package() {
   local src="$1"
