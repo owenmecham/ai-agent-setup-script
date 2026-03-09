@@ -31,7 +31,7 @@ export class TelegramChannel {
       const userId = ctx.from?.id;
 
       // Check allowlist
-      if (this.allowedUserIds.size > 0 && userId && !this.allowedUserIds.has(userId)) {
+      if (userId && !this.allowedUserIds.has(userId)) {
         logger.warn({ userId }, 'Unauthorized user attempted to message bot');
         await ctx.reply('Unauthorized. This bot is private.');
         return;
