@@ -40,7 +40,10 @@ for (const step of ALL_STEPS) {
 
 import { spawnSync } from 'node:child_process';
 
-
+app.post('/api/open-fda-settings', (_req, res) => {
+  spawnSync('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']);
+  res.json({ opened: true });
+});
 
 // --- Routes ---
 
