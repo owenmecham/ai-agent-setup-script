@@ -467,34 +467,15 @@ else
   ok
 fi
 
-# 10a. Google Cloud SDK (required by gws CLI)
-check "Google Cloud SDK (gcloud)"
-if command -v gcloud &>/dev/null; then
+# 10a. Google Workspace MCP (workspace-mcp via uv)
+# uv is already installed above (step 7b), so just ensure workspace-mcp is available
+check "workspace-mcp (Google Workspace MCP)"
+if uvx workspace-mcp --help &>/dev/null 2>&1; then
   skip
 else
   installing
-  brew install --cask google-cloud-sdk
-  # Source gcloud shell integration for the current session
-  if [ -f "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc" ]; then
-    source "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc"
-  fi
+  uv tool install workspace-mcp 2>/dev/null || true
   ok
-fi
-
-# 10b. Google Workspace CLI (auth deferred to `pnpm murph google-auth`)
-check "Google Workspace CLI"
-if command -v gws &>/dev/null; then
-  skip
-else
-  installing
-  sudo npm install -g @googleworkspace/cli@0.6.3
-  ok
-fi
-
-# Ensure npm global bin is on PATH (needed when nvm was just installed)
-NPM_GLOBAL_BIN="$(npm prefix -g 2>/dev/null)/bin" || true
-if [ -n "$NPM_GLOBAL_BIN" ] && [ -d "$NPM_GLOBAL_BIN" ]; then
-  export PATH="$NPM_GLOBAL_BIN:$PATH"
 fi
 
 # 11. Claude Desktop
@@ -563,11 +544,6 @@ ok
 # Brew casks (Claude Desktop, Obsidian, Google Chrome)
 check "Brew cask upgrades"
 brew upgrade --cask 2>/dev/null || true
-ok
-
-# npm globals (gws)
-check "npm global upgrades"
-npm install -g @googleworkspace/cli@0.6.3 2>/dev/null || true
 ok
 
 # pnpm globals (wrangler)
@@ -737,7 +713,7 @@ echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
 echo ""
 echo "  4. Google Workspace setup (optional — run when ready):"
 echo "     pnpm murph google-auth"
-echo "     (Walks through Google Cloud project setup + browser OAuth)"
+echo "     (Configures workspace-mcp with Google OAuth credentials + browser auth)"
 echo ""
 echo "  5. Plaud Desktop (if needed):"
 echo "     Download from https://global.plaud.ai/pages/app-download"

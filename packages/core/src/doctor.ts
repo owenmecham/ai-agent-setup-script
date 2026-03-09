@@ -236,34 +236,51 @@ export async function runDoctor(): Promise<DoctorResult> {
     // Config loading failed — already reported above
   }
 
-  // 6. Google Workspace CLI + auth
-  const gwsResult = await spawnCheck('gws', ['--version']);
-  if (gwsResult.code === 0) {
-    checks.push({ name: 'Google Workspace CLI', status: 'pass', message: `Installed: ${gwsResult.stdout.trim()}` });
+  // 6. Google Workspace MCP (workspace-mcp via uvx)
+  const uvxResult = await spawnCheck('uvx', ['--version']);
+  if (uvxResult.code === 0) {
+    checks.push({ name: 'uvx', status: 'pass', message: `Installed: ${uvxResult.stdout.trim()}` });
 
-    // Check if authenticated by trying a quick API call
-    const gwsAuthResult = await spawnCheck('gws', ['gmail', 'users', 'getProfile', '--userId', 'me']);
-    if (gwsAuthResult.code === 0) {
-      const emailMatch = gwsAuthResult.stdout.match(/"emailAddress"\s*:\s*"([^"]+)"/);
-      checks.push({
-        name: 'Google auth',
-        status: 'pass',
-        message: emailMatch ? `Authenticated as ${emailMatch[1]}` : 'Authenticated',
-      });
+    // Check if Google OAuth env vars are set
+    if (process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) {
+      checks.push({ name: 'Google OAuth credentials', status: 'pass', message: 'Environment variables set' });
+
+      // Check if workspace-mcp credentials exist
+      const { existsSync, readdirSync } = await import('node:fs');
+      const { join: pathJoin } = await import('node:path');
+      const credDir = pathJoin(process.env.HOME ?? '', '.google_workspace_mcp', 'credentials');
+      let hasCredFiles = false;
+      try {
+        hasCredFiles = existsSync(credDir) && readdirSync(credDir).some(f => f.endsWith('.json'));
+      } catch {}
+      if (hasCredFiles) {
+        checks.push({
+          name: 'Google auth',
+          status: 'pass',
+          message: 'Authenticated (workspace-mcp credentials found)',
+        });
+      } else {
+        checks.push({
+          name: 'Google auth',
+          status: 'warn',
+          message: 'Not authenticated — no credentials at ~/.google_workspace_mcp/credentials/',
+          fix: 'Run: pnpm murph google-auth',
+        });
+      }
     } else {
       checks.push({
-        name: 'Google auth',
+        name: 'Google OAuth credentials',
         status: 'warn',
-        message: 'Not authenticated (Google MCP server will not connect)',
+        message: 'GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET not set',
         fix: 'Run: pnpm murph google-auth',
       });
     }
   } else {
     checks.push({
-      name: 'Google Workspace CLI',
+      name: 'uvx',
       status: 'warn',
-      message: 'gws CLI not installed (Google MCP server will not connect)',
-      fix: 'Install: npm install -g @googleworkspace/cli@0.6.3 && pnpm murph google-auth',
+      message: 'uvx not installed (Google MCP server will not connect)',
+      fix: 'Install: brew install uv',
     });
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { execSync, spawn, type ChildProcess } from 'child_process';
-import { existsSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, writeFileSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -10,39 +10,42 @@ let authState: {
   url: string | null;
   error: string | null;
   startedAt: number;
+  pollTimer: ReturnType<typeof setInterval> | null;
 } | null = null;
 
-const GWS_CONFIG_DIR = join(homedir(), '.config', 'gws');
-const CLIENT_SECRET_PATH = join(GWS_CONFIG_DIR, 'client_secret.json');
-const CREDENTIALS_PATH = join(GWS_CONFIG_DIR, 'credentials.json');
+const HOME = homedir();
+const CRED_DIR = join(HOME, '.google_workspace_mcp', 'credentials');
+const ZSHRC_PATH = join(HOME, '.zshrc');
 
-function isGwsInstalled(): boolean {
+function isUvxInstalled(): boolean {
   try {
-    execSync('which gws', { stdio: 'ignore' });
+    execSync('which uvx', { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
 }
 
-function checkAuthStatus(): { authenticated: boolean; email?: string; error?: string } {
+function hasGoogleEnvVars(): boolean {
+  return !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET);
+}
+
+function hasCredentialFiles(): boolean {
   try {
-    const result = execSync('gws gmail users getProfile --userId me 2>&1', {
-      timeout: 10000,
-      encoding: 'utf-8',
-    });
-    const emailMatch = result.match(/"emailAddress"\s*:\s*"([^"]+)"/);
-    return {
-      authenticated: true,
-      email: emailMatch?.[1] ?? undefined,
-    };
-  } catch {
-    return { authenticated: false, error: 'Not authenticated' };
+    return existsSync(CRED_DIR) && readdirSync(CRED_DIR).some(f => f.endsWith('.json'));
+  } catch { return false; }
+}
+
+function checkAuthStatus(): { authenticated: boolean; error?: string } {
+  if (hasCredentialFiles()) {
+    return { authenticated: true };
   }
+  return { authenticated: false, error: 'Not authenticated — no workspace-mcp credentials found' };
 }
 
 function cleanupAuthProcess() {
   if (authState) {
+    if (authState.pollTimer) clearInterval(authState.pollTimer);
     try {
       authState.proc.kill();
     } catch {
@@ -54,9 +57,9 @@ function cleanupAuthProcess() {
 
 // GET — check auth status + poll for in-progress auth URL
 export async function GET() {
-  const gwsInstalled = isGwsInstalled();
-  const hasClientCredentials = existsSync(CLIENT_SECRET_PATH);
-  const status = gwsInstalled ? checkAuthStatus() : { authenticated: false, error: 'gws CLI not installed' };
+  const uvxInstalled = isUvxInstalled();
+  const hasCredentials = hasGoogleEnvVars();
+  const status = checkAuthStatus();
 
   // If auth just completed, clean up the process state
   if (authState && status.authenticated) {
@@ -69,11 +72,11 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    installed: gwsInstalled,
+    installed: uvxInstalled,
     authenticated: status.authenticated,
-    email: status.email ?? null,
+    email: null, // workspace-mcp doesn't expose email in a simple check
     error: status.error ?? null,
-    hasClientCredentials,
+    hasClientCredentials: hasCredentials,
     authInProgress: authState !== null,
     authUrl: authState?.url ?? null,
     authError: authState?.error ?? null,
@@ -82,14 +85,14 @@ export async function GET() {
 
 // POST — start non-blocking auth flow
 export async function POST() {
-  if (!isGwsInstalled()) {
+  if (!isUvxInstalled()) {
     return NextResponse.json(
-      { error: 'gws CLI not installed. Run: npm install -g @googleworkspace/cli' },
+      { error: 'uvx not installed. Install uv first: brew install uv' },
       { status: 400 },
     );
   }
 
-  if (!existsSync(CLIENT_SECRET_PATH)) {
+  if (!hasGoogleEnvVars()) {
     return NextResponse.json(
       { error: 'No OAuth credentials configured. Save your Client ID and Secret first.' },
       { status: 400 },
@@ -100,9 +103,9 @@ export async function POST() {
   cleanupAuthProcess();
 
   try {
-    const proc = spawn('gws', ['auth', 'login', '-s', 'drive,gmail,calendar,tasks,sheets,docs,slides'], {
+    const proc = spawn('uvx', ['workspace-mcp', '--tool-tier', 'core'], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
+      env: { ...process.env },
     });
 
     authState = {
@@ -110,7 +113,16 @@ export async function POST() {
       url: null,
       error: null,
       startedAt: Date.now(),
+      pollTimer: null,
     };
+
+    // Poll for credential files — kill server once auth completes
+    const credPoll = setInterval(() => {
+      if (hasCredentialFiles()) {
+        cleanupAuthProcess();
+      }
+    }, 2000);
+    authState.pollTimer = credPoll;
 
     const urlRegex = /https:\/\/accounts\.google\.com[^\s]+/;
 
@@ -130,8 +142,8 @@ export async function POST() {
       }
     };
 
-    proc.stdout.on('data', handleData);
-    proc.stderr.on('data', handleData);
+    proc.stdout?.on('data', handleData);
+    proc.stderr?.on('data', handleData);
 
     proc.on('close', (code) => {
       if (authState?.proc === proc) {
@@ -198,14 +210,13 @@ export async function POST() {
   }
 }
 
-// PUT — save OAuth app credentials (client_secret.json)
+// PUT — save OAuth app credentials (env vars in ~/.zshrc + process.env)
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { clientId, clientSecret, projectId } = body as {
+    const { clientId, clientSecret } = body as {
       clientId?: string;
       clientSecret?: string;
-      projectId?: string;
     };
 
     if (!clientId || !clientSecret) {
@@ -215,28 +226,34 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Write in Google Cloud Console "installed application" format
-    const clientSecretData = {
-      installed: {
-        client_id: clientId,
-        project_id: projectId || 'murph-agent',
-        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-        token_uri: 'https://oauth2.googleapis.com/token',
-        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
-        client_secret: clientSecret,
-        redirect_uris: ['http://localhost'],
-      },
+    // Set in current process
+    process.env.GOOGLE_OAUTH_CLIENT_ID = clientId;
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = clientSecret;
+
+    // Persist to ~/.zshrc
+    const envLines: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: clientId,
+      GOOGLE_OAUTH_CLIENT_SECRET: clientSecret,
     };
 
-    // Ensure config directory exists
-    mkdirSync(GWS_CONFIG_DIR, { recursive: true });
-
-    writeFileSync(CLIENT_SECRET_PATH, JSON.stringify(clientSecretData, null, 2));
-
-    // Delete existing credentials to force re-auth
-    if (existsSync(CREDENTIALS_PATH)) {
-      unlinkSync(CREDENTIALS_PATH);
+    let zshrcContent = '';
+    try {
+      zshrcContent = readFileSync(ZSHRC_PATH, 'utf-8');
+    } catch {
+      // File doesn't exist yet
     }
+
+    for (const [key, value] of Object.entries(envLines)) {
+      const exportLine = `export ${key}="${value}"`;
+      const regex = new RegExp(`^export ${key}=.*$`, 'm');
+      if (regex.test(zshrcContent)) {
+        zshrcContent = zshrcContent.replace(regex, exportLine);
+      } else {
+        zshrcContent += `\n${exportLine}\n`;
+      }
+    }
+
+    writeFileSync(ZSHRC_PATH, zshrcContent, 'utf-8');
 
     return NextResponse.json({ success: true });
   } catch (err) {

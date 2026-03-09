@@ -123,6 +123,8 @@ export function buildAgentPlist(murphDir: string): string {
     'ANTHROPIC_API_KEY',
     'CLAUDE_API_KEY',
     'GOOGLE_APPLICATION_CREDENTIALS',
+    'GOOGLE_OAUTH_CLIENT_ID',       // workspace-mcp
+    'GOOGLE_OAUTH_CLIENT_SECRET',   // workspace-mcp
   ];
 
   let claudeEnvEntries = '';

@@ -41,6 +41,7 @@ interface Config {
     command?: string;
     args?: string[];
     headers?: Record<string, string>;
+    env?: Record<string, string>;
   }>;
 }
 
@@ -57,7 +58,7 @@ export default function SettingsPage() {
   });
 
   const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
-  const [googleCredForm, setGoogleCredForm] = useState({ clientId: '', clientSecret: '', projectId: '' });
+  const [googleCredForm, setGoogleCredForm] = useState({ clientId: '', clientSecret: '' });
   const [googleCredSaving, setGoogleCredSaving] = useState(false);
   const [googleCredError, setGoogleCredError] = useState<string | null>(null);
   const [googleCredSuccess, setGoogleCredSuccess] = useState(false);
@@ -282,20 +283,20 @@ export default function SettingsPage() {
                   : googleStatus?.authInProgress
                     ? 'Authentication in progress...'
                     : !googleStatus?.installed
-                      ? 'gws CLI not installed'
+                      ? 'uvx not installed'
                       : !googleStatus?.hasClientCredentials
                         ? 'OAuth credentials needed'
                         : 'Not authenticated'}
             </span>
           </div>
 
-          {/* State: gws CLI not installed */}
+          {/* State: uvx not installed */}
           {!googleStatus?.installed && (
             <div className="space-y-2">
               <p className="text-sm text-zinc-500">
-                Install the CLI first:{' '}
+                Install uv first:{' '}
                 <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
-                  npm install -g @googleworkspace/cli
+                  brew install uv
                 </code>
               </p>
               <p className="text-xs text-zinc-600">
@@ -455,16 +456,6 @@ export default function SettingsPage() {
                     className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
                   />
                 </div>
-                <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Project ID <span className="text-zinc-600">(optional)</span></label>
-                  <input
-                    type="text"
-                    value={googleCredForm.projectId}
-                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, projectId: e.target.value }))}
-                    placeholder="my-project-123"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
-                  />
-                </div>
                 {googleCredError && (
                   <p className="text-sm text-red-400">{googleCredError}</p>
                 )}
@@ -488,7 +479,7 @@ export default function SettingsPage() {
                           setGoogleCredError(data.error || 'Failed to save');
                         } else {
                           setGoogleCredSuccess(true);
-                          setGoogleCredForm({ clientId: '', clientSecret: '', projectId: '' });
+                          setGoogleCredForm({ clientId: '', clientSecret: '' });
                           setShowCredForm(false);
                           await refetchGoogle();
                         }

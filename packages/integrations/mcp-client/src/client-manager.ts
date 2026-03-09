@@ -11,6 +11,7 @@ export interface McpServerConfig {
   command?: string;
   args?: string[];
   headers?: Record<string, string>;
+  env?: Record<string, string>;
 }
 
 interface ManagedClient {
@@ -35,7 +36,7 @@ export class McpClientManager {
       const transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
-        env: process.env as Record<string, string>,
+        env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
         stderr: 'pipe',
       });
 

@@ -24,10 +24,16 @@ security:
     mcp.*: auto
     mcp.google.gmail.users.messages.send: require
     mcp.google.gmail.users.drafts.send: require
+    mcp.google.send_email: require
+    mcp.google.create_draft: require
     mcp.google.calendar.events.insert: notify
     mcp.google.calendar.events.delete: require
+    mcp.google.create_event: notify
+    mcp.google.delete_event: require
     mcp.google.drive.files.delete: require
     mcp.google.drive.files.create: notify
+    mcp.google.delete_drive_file: require
+    mcp.google.upload_drive_file: notify
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
@@ -77,8 +83,8 @@ mcp_servers:
     args: ["@playwright/mcp@latest"]
   - name: "google"
     transport: "stdio"
-    command: "gws"
-    args: ["mcp", "-s", "drive,gmail,calendar,tasks,sheets,docs,slides"]
+    command: "uvx"
+    args: ["workspace-mcp", "--tool-tier", "core"]
   - name: "plaud"
     transport: "stdio"
     command: "plaud-mcp"

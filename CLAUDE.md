@@ -78,24 +78,29 @@ PostgreSQL with tables: messages, entities, memories (pgvector), audit_log, secr
 
 ## Google Workspace Integration
 
-Google Workspace (Gmail, Calendar, Tasks, Drive) is integrated via the official `@googleworkspace/cli` MCP server.
+Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Forms, Chat) is integrated via [`workspace-mcp`](https://github.com/taylorwilsdon/google_workspace_mcp), a Python MCP server that runs via `uvx workspace-mcp` (stdio transport).
 
-**Setup:** `pnpm murph google-auth` — walks through Google Cloud project creation, API enablement, and browser-based OAuth. Can also be triggered from the dashboard Settings page.
+**Requirements:**
+- `uv` Python package manager (installed via `brew install uv`)
+- Google Cloud OAuth 2.0 Desktop credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars)
+
+**Setup:** `pnpm murph google-auth` — prompts for Google OAuth Client ID and Secret, stores them in `~/.zshrc`, and runs `uvx workspace-mcp` to complete browser-based OAuth. Can also be triggered from the dashboard Settings page.
 
 **How it works:**
-- The `gws mcp` command runs as an MCP server (stdio transport) alongside the agent
-- OAuth tokens are stored AES-256-GCM encrypted, key in macOS Keychain
-- Tokens auto-refresh indefinitely (unless consent screen is in "Testing" mode — 7-day expiry)
+- The `uvx workspace-mcp --tool-tier core` command runs as an MCP server (stdio transport) alongside the agent
+- OAuth tokens are stored locally in `~/.google_workspace_mcp/`
+- `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` must be set in the environment (stored in `~/.zshrc`, captured by launchd plist)
 - Write actions (send email, delete calendar events, delete Drive files) go through approval gates
 - Read actions (list emails, view calendar, search Drive) are auto-approved
 
 **Approval defaults for Google MCP actions:**
-- `mcp.google.gmail.users.messages.send` → `require`
-- `mcp.google.gmail.users.drafts.send` → `require`
-- `mcp.google.calendar.events.insert` → `notify`
-- `mcp.google.calendar.events.delete` → `require`
-- `mcp.google.drive.files.delete` → `require`
-- `mcp.google.drive.files.create` → `notify`
+- `mcp.google.send_email` → `require`
+- `mcp.google.create_draft` → `require`
+- `mcp.google.create_event` → `notify`
+- `mcp.google.delete_event` → `require`
+- `mcp.google.delete_drive_file` → `require`
+- `mcp.google.upload_drive_file` → `notify`
+- Legacy `gws`-style names are also mapped for backwards compatibility
 - All other Google MCP actions → `auto` (inherited from `mcp.*`)
 
 ## Plaud Integration
