@@ -62,8 +62,12 @@ export const verify: InstallStep = {
       message: hasModel ? 'nomic-embed-text available' : 'nomic-embed-text not found',
     });
 
-    // Claude CLI
-    const claudeResult = spawnSyncSafe('claude', ['--version'], { stdio: 'pipe' });
+    // Claude CLI — check native install location first, then PATH
+    const claudeBin = `${homedir()}/.claude/bin/claude`;
+    let claudeResult = spawnSyncSafe(claudeBin, ['--version'], { stdio: 'pipe' });
+    if (claudeResult.status !== 0) {
+      claudeResult = spawnSyncSafe('claude', ['--version'], { stdio: 'pipe' });
+    }
     checks.push({
       name: 'Claude CLI',
       passed: claudeResult.status === 0,
