@@ -160,6 +160,14 @@ fi
 echo "Installing installer dependencies..."
 CI=true pnpm install --filter @murph/installer --prod 2>&1 || true
 
+# Kill any existing wizard server from a previous launch
+EXISTING_PID=$(lsof -ti :3142 2>/dev/null || true)
+if [ -n "$EXISTING_PID" ]; then
+  echo "Killing stale wizard server (PID $EXISTING_PID)..."
+  kill $EXISTING_PID 2>/dev/null || true
+  sleep 1
+fi
+
 echo "Starting install wizard server..."
 node packages/installer/dist/server.js &
 WIZARD_PID=$!
