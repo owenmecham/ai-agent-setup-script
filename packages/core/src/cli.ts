@@ -744,10 +744,10 @@ async function main() {
 
         await new Promise(r => setTimeout(r, 500));
 
-        // Call a tool to trigger OAuth — list_labels is lightweight
+        // Call a tool to trigger OAuth — list_calendars is lightweight and in the core tier
         sendJsonRpc({
           jsonrpc: '2.0', id: 2, method: 'tools/call',
-          params: { name: 'list_labels', arguments: {} },
+          params: { name: 'list_calendars', arguments: {} },
         });
 
         // Poll for credential files (max 3 minutes)
