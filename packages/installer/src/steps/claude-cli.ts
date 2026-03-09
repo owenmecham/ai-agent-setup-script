@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import type { InstallStep } from './index.js';
-import { runCommand } from '../util.js';
 
 export const claudeCli: InstallStep = {
   name: 'claude-cli',
@@ -20,8 +19,21 @@ export const claudeCli: InstallStep = {
       return;
     }
 
-    emit('Installing Claude Code CLI...');
-    await runCommand('npm', ['install', '-g', '@anthropic-ai/claude-code'], emit);
+    emit('Installing Claude Code CLI (you may be prompted for your password)...');
+
+    // /usr/local is owned by root (official Node.js .pkg installer), so npm -g needs sudo.
+    // Use osascript to show the native macOS password dialog.
+    const install = spawnSync('osascript', [
+      '-e',
+      'do shell script "npm install -g @anthropic-ai/claude-code" with administrator privileges',
+    ], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 300_000,
+    });
+
+    if (install.status !== 0) {
+      throw new Error(`Failed to install Claude Code CLI: ${install.stderr.toString()}`);
+    }
 
     // Add npm global bin to PATH
     const npmBin = spawnSync('npm', ['prefix', '-g'], { stdio: 'pipe' });
@@ -30,6 +42,12 @@ export const claudeCli: InstallStep = {
       process.env.PATH = `${binDir}:${process.env.PATH}`;
     }
 
-    emit('Claude Code CLI installed');
+    // Verify
+    const verify = spawnSync('claude', ['--version'], { stdio: 'pipe' });
+    if (verify.status === 0) {
+      emit(`Claude Code CLI installed (${verify.stdout.toString().trim()})`);
+    } else {
+      emit('Claude Code CLI installed');
+    }
   },
 };
