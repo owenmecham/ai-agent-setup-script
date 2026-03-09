@@ -14,7 +14,10 @@ PAYLOAD_DIR="$BUILD_DIR/payload"
 
 echo "=== Building release payload ==="
 
-# --- 1. Build everything first (--force to skip turbo cache) ---
+# --- 1. Clean turbo cache and rebuild (--force to skip turbo cache) ---
+echo "Cleaning turbo cache..."
+find "$REPO_ROOT" -name ".turbo" -type d -exec rm -rf {} + 2>/dev/null || true
+
 echo "Building all packages..."
 (cd "$REPO_ROOT" && pnpm build --force)
 
