@@ -222,10 +222,52 @@ The web dashboard runs on `http://localhost:3141` and provides chat, audit log, 
 pnpm build                     # Build all packages
 pnpm dev                       # Start in development mode
 pnpm murph start               # Start the agent
+pnpm murph doctor              # Run system diagnostics
+pnpm murph google-auth         # Set up Google Workspace OAuth
+pnpm murph setup-plaud         # Set up Plaud MCP server
 pnpm murph secret set <k> <v>  # Store an encrypted secret
 pnpm murph secret list         # List stored secrets
 pnpm murph secret delete <k>   # Delete a secret
 pnpm run migrate               # Run database migrations
+```
+
+## Managing the Background Agent
+
+The agent runs as a macOS LaunchAgent (`com.murph.agent`) with `KeepAlive` enabled, so it auto-starts on login and auto-restarts on crash.
+
+```bash
+# Restart the agent (KeepAlive brings it back within 5 seconds)
+launchctl stop com.murph.agent
+
+# Check if the agent is running (first column = PID, "-" means stopped)
+launchctl list com.murph.agent
+
+# View agent logs
+tail -f ~/.murph/agent.stdout.log
+tail -f ~/.murph/agent.stderr.log
+
+# Fully unload (prevents auto-restart until re-loaded)
+launchctl unload ~/Library/LaunchAgents/com.murph.agent.plist
+
+# Re-load after unloading
+launchctl load ~/Library/LaunchAgents/com.murph.agent.plist
+```
+
+You can also restart the agent from the dashboard at `http://localhost:3141`.
+
+### Development Mode
+
+To run the agent in the foreground with live output in your terminal:
+
+```bash
+# Stop the background agent first
+launchctl unload ~/Library/LaunchAgents/com.murph.agent.plist
+
+# Run in foreground (Ctrl+C to stop)
+pnpm murph start
+
+# When done developing, re-enable the background agent
+launchctl load ~/Library/LaunchAgents/com.murph.agent.plist
 ```
 
 ## Security
