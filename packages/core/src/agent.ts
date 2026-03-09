@@ -365,8 +365,13 @@ export class Agent {
     }
 
     for (const channel of this.channels) {
-      await channel.start();
-      logger.info({ channel: channel.name }, 'Channel started');
+      try {
+        await channel.start();
+        logger.info({ channel: channel.name }, 'Channel started');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ channel: channel.name, error: message }, 'Channel failed to start — skipping');
+      }
     }
   }
 

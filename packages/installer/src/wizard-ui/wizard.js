@@ -21,13 +21,14 @@ function showScreen(name) {
 // --- Prerequisites ---
 
 let fdaGranted = false;
+let nodeFdaGranted = false;
 let accessibilityGranted = false;
 
 function updatePrereqButton() {
   const allChecked = Array.from(
     document.querySelectorAll('#screen-prerequisites input[type=checkbox]')
   ).every(c => c.checked);
-  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted);
+  document.getElementById('btn-prereq-continue').disabled = !(allChecked && accessibilityGranted && nodeFdaGranted);
 }
 
 document.querySelectorAll('#screen-prerequisites input[type=checkbox]').forEach(cb => {
@@ -70,6 +71,44 @@ async function checkAccessibility() {
   }
   updatePrereqButton();
 }
+
+async function checkNodeFda() {
+  const statusEl = document.getElementById('node-fda-status');
+  statusEl.textContent = 'Checking...';
+  statusEl.className = 'perm-status checking';
+  try {
+    const res = await fetch('/api/check-node-fda');
+    const data = await res.json();
+    if (data.granted) {
+      nodeFdaGranted = true;
+      statusEl.textContent = '✓ Granted';
+      statusEl.className = 'perm-status granted';
+    } else {
+      nodeFdaGranted = false;
+      statusEl.textContent = '✗ Not granted';
+      statusEl.className = 'perm-status not-granted';
+    }
+  } catch {
+    nodeFdaGranted = false;
+    statusEl.textContent = 'Check failed';
+    statusEl.className = 'perm-status not-granted';
+  }
+  updatePrereqButton();
+}
+
+async function loadNodePath() {
+  try {
+    const res = await fetch('/api/node-path');
+    const data = await res.json();
+    const el = document.getElementById('node-path-display');
+    if (el && data.nodePath) {
+      el.textContent = data.nodePath;
+    }
+  } catch { /* ignore */ }
+}
+
+// Load the node path on page init
+loadNodePath();
 
 // --- Steps ---
 

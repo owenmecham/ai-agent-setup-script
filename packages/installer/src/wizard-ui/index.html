@@ -51,16 +51,25 @@
         </div>
 
         <div class="permission-card" style="margin-top: 1.5rem">
-          <h3>Full Disk Access (Warning)</h3>
-          <p>Murph needs Full Disk Access to read the iMessage database.</p>
+          <h3>Full Disk Access</h3>
           <p>
-            Please ensure your Terminal app (e.g.
-            <strong>Terminal.app</strong> or <strong>iTerm</strong>) has Full
-            Disk Access granted in System Settings > Privacy & Security before
-            using the Agent.
+            Murph needs Full Disk Access to read the iMessage database.
+            Because the agent runs via LaunchAgent, the <strong>node binary</strong> itself
+            needs FDA — not your terminal app.
           </p>
+          <ol>
+            <li>Click <strong>Open Settings</strong> below</li>
+            <li>
+              Click the <strong>+</strong> button and add the node binary:<br />
+              <code id="node-path-display" style="user-select: all; font-size: 0.9em;">detecting...</code>
+            </li>
+            <li>Toggle the switch <strong>ON</strong></li>
+            <li>Click <strong>Verify</strong> to confirm access</li>
+          </ol>
           <div class="btn-row" style="justify-content: flex-start; gap: 0.5rem;">
             <button class="btn small" onclick="openFdaSettings()">Open Settings</button>
+            <button class="btn small" onclick="checkNodeFda()">Verify</button>
+            <span id="node-fda-status" class="perm-status"></span>
           </div>
         </div>
 

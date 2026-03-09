@@ -38,11 +38,44 @@ for (const step of ALL_STEPS) {
 
 // --- Full Disk Access helpers ---
 
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execSync } from 'node:child_process';
+import { accessSync, constants } from 'node:fs';
+import { homedir } from 'node:os';
 
 app.post('/api/open-fda-settings', (_req, res) => {
   spawnSync('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles']);
   res.json({ opened: true });
+});
+
+// Return the detected node binary path
+app.get('/api/node-path', (_req, res) => {
+  let nodePath = 'node';
+  try {
+    nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+  } catch {
+    nodePath = '/usr/local/bin/node';
+  }
+  res.json({ nodePath });
+});
+
+// Check whether the node process can read ~/Library/Messages/chat.db (FDA proxy)
+app.get('/api/check-node-fda', (_req, res) => {
+  let nodePath = 'node';
+  try {
+    nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+  } catch {
+    nodePath = '/usr/local/bin/node';
+  }
+
+  const chatDbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
+  let granted = false;
+  try {
+    accessSync(chatDbPath, constants.R_OK);
+    granted = true;
+  } catch {
+    granted = false;
+  }
+  res.json({ granted, nodePath });
 });
 
 // --- Routes ---
