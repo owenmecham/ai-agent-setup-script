@@ -577,11 +577,11 @@ async function main() {
 
       // 2. Prompt for OAuth credentials
       console.log('');
-      console.log('You need a Google Cloud OAuth 2.0 Web Application client.');
+      console.log('You need a Google Cloud OAuth 2.0 Desktop client.');
       console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
-      console.log('  2. Create an OAuth 2.0 Client ID (type: Web application)');
-      console.log('  3. Under "Authorized redirect URIs", add: http://localhost:8000/oauth2callback');
-      console.log('  4. Enable these APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides');
+      console.log('  2. Create an OAuth 2.0 Client ID (type: Desktop app)');
+      console.log('  3. Enable these APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides');
+      console.log('  4. Under OAuth consent screen, add your Google account as a test user');
       console.log('');
 
       const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -619,8 +619,6 @@ async function main() {
           process.exit(1);
         }
       }
-
-      rl.close();
 
       // 3. Store env vars in ~/.zshrc
       const zshrcPath = `${home}/.zshrc`;
@@ -679,9 +677,22 @@ async function main() {
 
       if (hasCredFiles()) {
         console.log('');
-        console.log('✓ Google Workspace credentials already exist.');
-        console.log('  To re-authenticate, delete ~/.google_workspace_mcp/credentials/ and run again.');
-      } else {
+        console.log('Google Workspace credentials already exist.');
+        const reauth = await ask('Re-authenticate? This will clear existing tokens. (y/N) ');
+        if (reauth.toLowerCase() === 'y') {
+          const { rmSync } = await import('node:fs');
+          rmSync(credDir, { recursive: true, force: true });
+          console.log('✓ Cleared existing credentials.');
+        } else {
+          console.log('  Keeping existing credentials.');
+          rl.close();
+          process.exit(0);
+        }
+      }
+
+      rl.close();
+
+      if (!hasCredFiles()) {
         console.log('');
         console.log('Starting workspace-mcp to initiate OAuth...');
         console.log('A browser window should open for Google authorization.');
@@ -691,7 +702,7 @@ async function main() {
           'workspace-mcp', '--single-user', '--tool-tier', 'core',
         ], {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret },
+          env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret, OAUTHLIB_INSECURE_TRANSPORT: '1' },
         });
 
         // Watch stderr for OAuth URLs and status

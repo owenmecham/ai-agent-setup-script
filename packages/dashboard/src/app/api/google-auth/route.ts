@@ -105,7 +105,7 @@ export async function POST() {
   try {
     const proc = spawn('uvx', ['workspace-mcp', '--single-user', '--tool-tier', 'core'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, OAUTHLIB_INSECURE_TRANSPORT: '1' },
     });
 
     authState = {

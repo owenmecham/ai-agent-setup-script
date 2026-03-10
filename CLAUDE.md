@@ -82,25 +82,36 @@ Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Forms, Ch
 
 **Requirements:**
 - `uv` Python package manager (installed via `brew install uv`)
-- Google Cloud OAuth 2.0 **Web Application** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars) — the credential must have `http://localhost:8000/oauth2callback` as an authorized redirect URI
+- Google Cloud OAuth 2.0 **Desktop** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars)
+- Under OAuth consent screen, add your Google account as a test user
 
-**Setup:** `pnpm murph google-auth` — prompts for Google OAuth Client ID and Secret, stores them in `~/.zshrc`, and runs `uvx workspace-mcp` to complete browser-based OAuth. Can also be triggered from the dashboard Settings page.
+**Setup:** `pnpm murph google-auth` — prompts for Google OAuth Client ID and Secret, stores them in `~/.zshrc`, and runs `uvx workspace-mcp` to complete browser-based OAuth. If credentials already exist, it prompts to re-authenticate (clears tokens and re-runs OAuth). Can also be triggered from the dashboard Settings page.
 
 **How it works:**
 - The `uvx workspace-mcp --tool-tier core` command runs as an MCP server (stdio transport) alongside the agent
 - OAuth tokens are stored locally in `~/.google_workspace_mcp/`
 - `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` must be set in the environment (stored in `~/.zshrc`, captured by launchd plist)
-- Write actions (send email, delete calendar events, delete Drive files) go through approval gates
-- Read actions (list emails, view calendar, search Drive) are auto-approved
+- `OAUTHLIB_INSECURE_TRANSPORT=1` is set in the MCP server env (required for localhost OAuth callback)
+- Write actions (send email, create/modify docs, manage events) go through approval gates
+- Read actions (list emails, view calendar, search Drive) are auto-approved via `mcp.*: auto`
+- To refresh expired tokens: run `pnpm murph google-auth` and choose to re-authenticate
 
-**Approval defaults for Google MCP actions:**
-- `mcp.google.send_email` → `require`
-- `mcp.google.create_draft` → `require`
-- `mcp.google.create_event` → `notify`
-- `mcp.google.delete_event` → `require`
-- `mcp.google.delete_drive_file` → `require`
-- `mcp.google.upload_drive_file` → `notify`
-- Legacy `gws`-style names are also mapped for backwards compatibility
+**Approval defaults for Google MCP actions (matching workspace-mcp core tier tool names):**
+- `mcp.google.send_gmail_message` → `require`
+- `mcp.google.send_message` (Chat) → `require`
+- `mcp.google.manage_event` → `notify`
+- `mcp.google.create_drive_file` → `notify`
+- `mcp.google.create_drive_folder` → `notify`
+- `mcp.google.import_to_google_doc` → `notify`
+- `mcp.google.create_doc` → `notify`
+- `mcp.google.modify_doc_text` → `notify`
+- `mcp.google.create_spreadsheet` → `notify`
+- `mcp.google.modify_sheet_values` → `notify`
+- `mcp.google.manage_contact` → `notify`
+- `mcp.google.manage_task` → `notify`
+- `mcp.google.create_script_project` → `require`
+- `mcp.google.update_script_content` → `require`
+- `mcp.google.run_script_function` → `require`
 - All other Google MCP actions → `auto` (inherited from `mcp.*`)
 
 ## Plaud Integration

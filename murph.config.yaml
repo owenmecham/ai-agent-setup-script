@@ -22,18 +22,21 @@ security:
     telegram.send: notify
     bop.*: require
     mcp.*: auto
-    mcp.google.gmail.users.messages.send: require
-    mcp.google.gmail.users.drafts.send: require
-    mcp.google.send_email: require
-    mcp.google.create_draft: require
-    mcp.google.calendar.events.insert: notify
-    mcp.google.calendar.events.delete: require
-    mcp.google.create_event: notify
-    mcp.google.delete_event: require
-    mcp.google.drive.files.delete: require
-    mcp.google.drive.files.create: notify
-    mcp.google.delete_drive_file: require
-    mcp.google.upload_drive_file: notify
+    mcp.google.send_gmail_message: require
+    mcp.google.manage_event: notify
+    mcp.google.create_drive_file: notify
+    mcp.google.create_drive_folder: notify
+    mcp.google.import_to_google_doc: notify
+    mcp.google.create_doc: notify
+    mcp.google.modify_doc_text: notify
+    mcp.google.create_spreadsheet: notify
+    mcp.google.modify_sheet_values: notify
+    mcp.google.send_message: require
+    mcp.google.manage_contact: notify
+    mcp.google.manage_task: notify
+    mcp.google.create_script_project: require
+    mcp.google.update_script_content: require
+    mcp.google.run_script_function: require
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
@@ -85,6 +88,8 @@ mcp_servers:
     transport: "stdio"
     command: "uvx"
     args: ["workspace-mcp", "--tool-tier", "core"]
+    env:
+      OAUTHLIB_INSECURE_TRANSPORT: "1"
   - name: "plaud"
     transport: "stdio"
     command: "plaud-mcp"
