@@ -16,8 +16,6 @@ embedding:
 security:
   dashboard_port: 3141
   approval_defaults:
-    gmail.send: require
-    gmail.read: auto
     imessage.send: require
     telegram.send: notify
     bop.*: require
@@ -26,9 +24,9 @@ security:
     google.gmail.get: auto
     google.gmail.modify: notify
     google.gmail.archive: notify
-    google.gmail.send: require
+    google.gmail.send: notify
     google.gmail.draft: notify
-    google.gmail.reply: require
+    google.gmail.reply: notify
     google.gmail.labels.list: auto
     google.gmail.labels.create: notify
     google.calendar.list: auto
