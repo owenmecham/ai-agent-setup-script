@@ -335,6 +335,9 @@ ok
 # Change to install directory for remaining steps
 cd "$INSTALL_DIR"
 
+# Pre-create ~/.cache so sudo corepack doesn't create it as root
+mkdir -p "$HOME/.cache"
+
 # 6. Node.js (official .pkg installer)
 check "Node.js 22+"
 NODE_MAJOR=$(node --version 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
