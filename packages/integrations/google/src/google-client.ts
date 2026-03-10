@@ -552,8 +552,57 @@ export class GoogleClient implements GoogleService {
     return '';
   }
 
+  private static readonly UNICODE_TO_ASCII: [RegExp, string][] = [
+    [/\u2014/g, '--'],       // em dash
+    [/\u2013/g, '-'],        // en dash
+    [/\u2212/g, '-'],        // minus sign
+    [/[\u2018\u2019\u201A]/g, "'"],  // curly single quotes
+    [/[\u201C\u201D\u201E]/g, '"'],  // curly double quotes
+    [/\u2026/g, '...'],      // ellipsis
+    [/\u2022/g, '-'],        // bullet
+    [/\u00B7/g, '-'],        // middle dot
+    [/[\u00A0\u2000-\u200A\u202F\u205F]/g, ' '], // non-breaking / fancy spaces
+    [/[\u200B-\u200D\uFEFF]/g, ''],  // zero-width chars
+    [/\u00AD/g, ''],         // soft hyphen
+    [/\u00BD/g, '1/2'],      // ½
+    [/\u00BC/g, '1/4'],      // ¼
+    [/\u00BE/g, '3/4'],      // ¾
+    [/\u00A9/g, '(c)'],      // ©
+    [/\u00AE/g, '(R)'],      // ®
+    [/\u2122/g, '(TM)'],     // ™
+    [/\u2192/g, '->'],       // →
+    [/\u2190/g, '<-'],       // ←
+    [/\uFB01/g, 'fi'],       // fi ligature
+    [/\uFB02/g, 'fl'],       // fl ligature
+  ];
+
+  /** Replace common Unicode characters with ASCII equivalents, keep emojis. */
+  private sanitizeForEmail(text: string): string {
+    let result = text;
+    for (const [pattern, replacement] of GoogleClient.UNICODE_TO_ASCII) {
+      result = result.replace(pattern, replacement);
+    }
+    // Strip remaining non-ASCII that isn't an emoji (emoji regex: surrogate pairs + common emoji ranges)
+    // eslint-disable-next-line no-misleading-character-class
+    result = result.replace(/[^\x00-\x7F\u{1F300}-\u{1FAD6}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{231A}-\u{23F3}]/gu, '');
+    return result;
+  }
+
+  /**
+   * RFC 2047 encode a header value if it contains non-ASCII characters.
+   * Uses Base64 encoding: =?UTF-8?B?<base64>?=
+   */
+  private encodeHeaderValue(value: string): string {
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]*$/.test(value)) return value;
+    return `=?UTF-8?B?${Buffer.from(value, 'utf-8').toString('base64')}?=`;
+  }
+
   private buildRawEmail(to: string, subject: string, body: string): string {
-    const raw = `To: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`;
+    const cleanSubject = this.sanitizeForEmail(subject);
+    const cleanBody = this.sanitizeForEmail(body);
+    const encodedSubject = this.encodeHeaderValue(cleanSubject);
+    const raw = `To: ${to}\r\nSubject: ${encodedSubject}\r\nContent-Type: text/plain; charset=utf-8\r\nMIME-Version: 1.0\r\n\r\n${cleanBody}`;
     return Buffer.from(raw).toString('base64url');
   }
 }
