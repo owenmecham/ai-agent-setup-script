@@ -118,5 +118,73 @@ if [ -f "$INSTALLER_DIR/bootstrap/murph.icns" ]; then
 fi
 
 echo "  Built: Murph.app"
+
+# --- Build "Update Murph.app" ---
+UPDATE_APP="$BUILD_DIR/Update Murph.app"
+mkdir -p "$UPDATE_APP/Contents/MacOS"
+mkdir -p "$UPDATE_APP/Contents/Resources"
+
+cat > "$UPDATE_APP/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>Update Murph</string>
+  <key>CFBundleDisplayName</key>
+  <string>Update Murph</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.murph.updater</string>
+  <key>CFBundleVersion</key>
+  <string>1.0.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleExecutable</key>
+  <string>update-murph</string>
+  <key>CFBundleIconFile</key>
+  <string>murph</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+cat > "$UPDATE_APP/Contents/MacOS/update-murph" << 'LAUNCHER'
+#!/usr/bin/env bash
+if [ -z "$TERM_PROGRAM" ]; then
+  open -a Terminal "$0"
+  exit 0
+fi
+
+echo "======================================"
+echo "  Murph Updater"
+echo "======================================"
+echo ""
+
+if [ -f "$HOME/murph/install.sh" ]; then
+  "$HOME/murph/install.sh" --update --yes
+  echo ""
+  osascript -e 'display notification "Murph has been updated and restarted." with title "Murph"' 2>/dev/null || true
+else
+  echo "ERROR: install.sh not found at ~/murph/install.sh"
+  echo "Please run the full installer first."
+  exit 1
+fi
+
+echo ""
+echo "You can close this window."
+read -rsp "Press any key to exit..." -n1
+LAUNCHER
+chmod +x "$UPDATE_APP/Contents/MacOS/update-murph"
+
+if [ -f "$INSTALLER_DIR/bootstrap/murph.icns" ]; then
+  cp "$INSTALLER_DIR/bootstrap/murph.icns" "$UPDATE_APP/Contents/Resources/murph.icns"
+fi
+
+echo "  Built: Update Murph.app"
 echo ""
 echo "App bundles are in: $BUILD_DIR/"

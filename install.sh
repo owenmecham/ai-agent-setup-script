@@ -30,6 +30,80 @@ for arg in "$@"; do
   esac
 done
 
+# --- Create "Update Murph.app" on Desktop ---
+create_update_app() {
+  local app_dir="$HOME/Desktop/Update Murph.app"
+  rm -rf "$app_dir"
+  mkdir -p "$app_dir/Contents/MacOS"
+  mkdir -p "$app_dir/Contents/Resources"
+
+  # Info.plist
+  cat > "$app_dir/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>Update Murph</string>
+  <key>CFBundleDisplayName</key>
+  <string>Update Murph</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.murph.updater</string>
+  <key>CFBundleVersion</key>
+  <string>1.0.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleExecutable</key>
+  <string>update-murph</string>
+  <key>CFBundleIconFile</key>
+  <string>murph</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+  # Launcher script — relaunches in Terminal if run from Finder
+  cat > "$app_dir/Contents/MacOS/update-murph" << 'LAUNCHER'
+#!/usr/bin/env bash
+# If launched from Finder (no TTY), reopen in Terminal
+if [ -z "$TERM_PROGRAM" ]; then
+  open -a Terminal "$0"
+  exit 0
+fi
+
+echo "======================================"
+echo "  Murph Updater"
+echo "======================================"
+echo ""
+
+if [ -f "$HOME/murph/install.sh" ]; then
+  "$HOME/murph/install.sh" --update --yes
+  echo ""
+  osascript -e 'display notification "Murph has been updated and restarted." with title "Murph"' 2>/dev/null || true
+else
+  echo "ERROR: install.sh not found at ~/murph/install.sh"
+  echo "Please run the full installer first."
+  exit 1
+fi
+
+echo ""
+echo "You can close this window."
+read -rsp "Press any key to exit..." -n1
+LAUNCHER
+  chmod +x "$app_dir/Contents/MacOS/update-murph"
+
+  # Copy icon if available
+  local icon_src="$HOME/murph/packages/installer/bootstrap/murph.icns"
+  if [ -f "$icon_src" ]; then
+    cp "$icon_src" "$app_dir/Contents/Resources/murph.icns"
+  fi
+}
+
 # --- Update-only path ---
 if [ "$UPDATE_ONLY" = true ]; then
   echo "======================================"
@@ -136,6 +210,9 @@ if [ "$UPDATE_ONLY" = true ]; then
       fi
     fi
   fi
+
+  # Create/refresh the Update Murph.app on Desktop
+  create_update_app
 
   echo ""
   echo -e "${GREEN}Update complete! Murph is running.${NC}"
@@ -681,61 +758,38 @@ else
   echo -e "${GREEN}All post-install checks passed.${NC}"
 fi
 
+# Create/refresh the Update Murph.app on Desktop
+create_update_app
+
 echo ""
 echo -e "${GREEN}======================================"
 echo "  Murph installation complete!"
 echo "======================================${NC}"
 echo ""
 echo "Installed to: $INSTALL_DIR"
+echo "Update shortcut: ~/Desktop/Update Murph.app"
 echo ""
-echo "Next steps:"
-echo ""
-echo "  1. Edit $INSTALL_DIR/murph.config.yaml with your settings"
-echo ""
-echo "  2. iMessage setup:"
-echo "     a. Grant Full Disk Access to your terminal:"
-echo "        - Open System Settings → Privacy & Security → Full Disk Access"
-echo "        - Click the + button"
-echo "        - Navigate to Applications → Utilities → Terminal.app"
-echo "          (or your preferred terminal: iTerm2, Warp, etc.)"
-echo "        - Toggle the switch ON"
-echo "        - Quit and reopen your terminal (permissions apply to new processes only)"
-echo "     b. Verify access:"
-echo "        sqlite3 ~/Library/Messages/chat.db \"SELECT COUNT(*) FROM message;\""
-echo "        (Should print a number. If \"operation not permitted\", FDA is not active.)"
-echo "     c. Grant Accessibility access for AppleScript (for sending replies):"
-echo "        - System Settings → Privacy & Security → Accessibility"
-echo "        - Add your terminal app"
-echo ""
-echo "  3. Telegram setup (if needed):"
-echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
-echo ""
-echo "  4. Google Workspace setup (optional — run when ready):"
-echo "     pnpm murph google-auth"
-echo "     (Authenticates with Google via gws CLI + browser OAuth)"
-echo ""
-echo "  5. Plaud Desktop (if needed):"
-echo "     Download from https://global.plaud.ai/pages/app-download"
-echo "     Sign in, then run: pnpm murph setup-plaud"
-echo ""
-echo "  6. Run diagnostics:"
-echo "     pnpm murph doctor"
-echo ""
-echo "  7. Start Murph:"
-echo "     Option A (recommended): Use the install wizard for LaunchAgent setup:"
-echo "       cd $INSTALL_DIR && node packages/installer/dist/server.js"
-echo "       Then open http://localhost:3142 in your browser"
-echo ""
-echo "     Option B (manual):"
-echo "       cd $INSTALL_DIR && pnpm murph start"
-echo "       Dashboard: http://localhost:3141"
-echo ""
-echo "  To update Murph later (code only):"
-echo "     $INSTALL_DIR/install.sh --update"
-echo ""
-echo "  For a full re-install (tools + code):"
-echo "     $INSTALL_DIR/install.sh"
-echo ""
-echo -e "${YELLOW}NOTE: If 'claude' or other commands are not found, restart your terminal"
-echo -e "or run:  source ~/.zshrc${NC}"
+
+# Launch the setup wizard to finish configuration
+echo "Launching setup wizard..."
+cd "$INSTALL_DIR"
+node packages/installer/dist/server.js &
+WIZARD_PID=$!
+sleep 2
+
+if kill -0 "$WIZARD_PID" 2>/dev/null; then
+  open "http://localhost:3142"
+  echo -e "${GREEN}Setup wizard running at http://localhost:3142${NC}"
+  echo "Complete the remaining steps in your browser."
+  echo ""
+  echo -e "${YELLOW}NOTE: If 'claude' or other commands are not found, restart your terminal"
+  echo -e "or run:  source ~/.zshrc${NC}"
+else
+  echo -e "${YELLOW}Could not start setup wizard. Complete setup manually:${NC}"
+  echo ""
+  echo "  cd $INSTALL_DIR && node packages/installer/dist/server.js"
+  echo "  Then open http://localhost:3142 in your browser"
+  echo ""
+  echo "  Or start manually: cd $INSTALL_DIR && pnpm murph start"
+fi
 echo ""
