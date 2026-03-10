@@ -337,11 +337,11 @@ ok
 cd "$INSTALL_DIR"
 
 # Ensure ~/.cache exists and is owned by current user.
-# A previous run's sudo commands may have created it as root,
-# which blocks the Claude Code installer from writing ~/.cache/claude.
+# A previous run's sudo commands may have created it (and subdirs) as root,
+# which blocks Claude Code, corepack, and other tools from writing there.
 mkdir -p "$HOME/.cache"
 if [ "$(stat -f '%u' "$HOME/.cache")" != "$(id -u)" ]; then
-  sudo chown "$(id -u):$(id -g)" "$HOME/.cache"
+  sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache"
 fi
 
 # 6. Node.js (official .pkg installer)
