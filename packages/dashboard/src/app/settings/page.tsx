@@ -283,20 +283,18 @@ export default function SettingsPage() {
                   : googleStatus?.authInProgress
                     ? 'Authentication in progress...'
                     : !googleStatus?.installed
-                      ? 'uvx not installed'
-                      : !googleStatus?.hasClientCredentials
-                        ? 'OAuth credentials needed'
-                        : 'Not authenticated'}
+                      ? 'gws CLI not installed'
+                      : 'Not authenticated'}
             </span>
           </div>
 
-          {/* State: uvx not installed */}
+          {/* State: gws not installed */}
           {!googleStatus?.installed && (
             <div className="space-y-2">
               <p className="text-sm text-zinc-500">
-                Install uv first:{' '}
+                Install gws CLI:{' '}
                 <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
-                  brew install uv
+                  npm install -g @googleworkspace/cli
                 </code>
               </p>
               <p className="text-xs text-zinc-600">
@@ -386,128 +384,22 @@ export default function SettingsPage() {
           {/* State: Has CLI, not authenticated, no auth in progress */}
           {googleStatus?.installed && !agentRestarting && !googleStatus?.authInProgress && !googleStatus?.authenticated && (
             <div className="space-y-3">
-              {googleStatus?.hasClientCredentials ? (
-                <>
-                  <button
-                    onClick={async () => {
-                      setGoogleAuthLoading(true);
-                      const res = await fetch('/api/google-auth', { method: 'POST' });
-                      const data = await res.json();
-                      if (data.error) setGoogleAuthLoading(false);
-                      await refetchGoogle();
-                    }}
-                    disabled={googleAuthLoading}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
-                  >
-                    {googleAuthLoading ? 'Starting...' : 'Connect Google Account'}
-                  </button>
-                  <button
-                    onClick={() => setShowCredForm(!showCredForm)}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors block"
-                  >
-                    Change OAuth Credentials
-                  </button>
-                </>
-              ) : (
-                <p className="text-sm text-zinc-400">
-                  Set up your OAuth credentials below to get started.
-                </p>
-              )}
+              <button
+                onClick={async () => {
+                  setGoogleAuthLoading(true);
+                  const res = await fetch('/api/google-auth', { method: 'POST' });
+                  const data = await res.json();
+                  if (data.error) setGoogleAuthLoading(false);
+                  await refetchGoogle();
+                }}
+                disabled={googleAuthLoading}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
+              >
+                {googleAuthLoading ? 'Starting...' : 'Connect Google Account'}
+              </button>
               <p className="text-xs text-zinc-600">
                 Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
               </p>
-            </div>
-          )}
-
-          {/* Credential form — shown when no credentials exist or user clicks "Change" */}
-          {googleStatus?.installed && !agentRestarting && (showCredForm || (googleStatus && !googleStatus.hasClientCredentials && !googleStatus.authInProgress)) && (
-            <div className="mt-4 pt-4 border-t border-zinc-800/50">
-              <h4 className="text-sm font-medium text-zinc-300 mb-3">OAuth Credentials</h4>
-              <p className="text-xs text-zinc-500 mb-3">
-                Create an OAuth client in the{' '}
-                <a
-                  href="https://console.cloud.google.com/apis/credentials"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300"
-                >
-                  Google Cloud Console
-                </a>
-                {' '}(Desktop app type). Enable the Gmail, Calendar, Tasks, Drive, Sheets, Docs, and Slides APIs.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Client ID</label>
-                  <input
-                    type="text"
-                    value={googleCredForm.clientId}
-                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, clientId: e.target.value }))}
-                    placeholder="123456789.apps.googleusercontent.com"
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Client Secret</label>
-                  <input
-                    type="password"
-                    value={googleCredForm.clientSecret}
-                    onChange={(e) => setGoogleCredForm((f) => ({ ...f, clientSecret: e.target.value }))}
-                    placeholder="GOCSPX-..."
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500"
-                  />
-                </div>
-                {googleCredError && (
-                  <p className="text-sm text-red-400">{googleCredError}</p>
-                )}
-                {googleCredSuccess && (
-                  <p className="text-sm text-green-400">Credentials saved. You can now connect your Google account.</p>
-                )}
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={async () => {
-                      setGoogleCredSaving(true);
-                      setGoogleCredError(null);
-                      setGoogleCredSuccess(false);
-                      try {
-                        const res = await fetch('/api/google-auth', {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(googleCredForm),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) {
-                          setGoogleCredError(data.error || 'Failed to save');
-                        } else {
-                          setGoogleCredSuccess(true);
-                          setGoogleCredForm({ clientId: '', clientSecret: '' });
-                          setShowCredForm(false);
-                          await refetchGoogle();
-                        }
-                      } catch {
-                        setGoogleCredError('Failed to save credentials');
-                      } finally {
-                        setGoogleCredSaving(false);
-                      }
-                    }}
-                    disabled={googleCredSaving || !googleCredForm.clientId || !googleCredForm.clientSecret}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-1.5 rounded text-sm transition-colors"
-                  >
-                    {googleCredSaving ? 'Saving...' : 'Save Credentials'}
-                  </button>
-                  {showCredForm && (
-                    <button
-                      onClick={() => {
-                        setShowCredForm(false);
-                        setGoogleCredError(null);
-                        setGoogleCredSuccess(false);
-                      }}
-                      className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>

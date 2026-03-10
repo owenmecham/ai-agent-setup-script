@@ -100,6 +100,9 @@ importers:
       '@murph/config':
         specifier: workspace:*
         version: link:../config
+      '@murph/integration-google':
+        specifier: workspace:*
+        version: link:../integrations/google
       '@murph/knowledge':
         specifier: workspace:*
         version: link:../knowledge
@@ -261,6 +264,19 @@ importers:
         version: 5.9.3
 
   packages/integrations/gohighlevel:
+    dependencies:
+      pino:
+        specifier: ^9.5.0
+        version: 9.14.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.13
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/integrations/google:
     dependencies:
       pino:
         specifier: ^9.5.0

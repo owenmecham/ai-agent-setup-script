@@ -467,14 +467,13 @@ else
   ok
 fi
 
-# 10a. Google Workspace MCP (workspace-mcp via uv)
-# uv is already installed above (step 7b), so just ensure workspace-mcp is available
-check "workspace-mcp (Google Workspace MCP)"
-if uvx workspace-mcp --help &>/dev/null 2>&1; then
+# 10a. Google Workspace CLI (gws)
+check "gws CLI (Google Workspace)"
+if command -v gws &>/dev/null; then
   skip
 else
   installing
-  uv tool install workspace-mcp 2>/dev/null || true
+  npm install -g @googleworkspace/cli 2>/dev/null || true
   ok
 fi
 
@@ -713,7 +712,7 @@ echo "     pnpm murph secret set TELEGRAM_BOT_TOKEN <your-token>"
 echo ""
 echo "  4. Google Workspace setup (optional — run when ready):"
 echo "     pnpm murph google-auth"
-echo "     (Configures workspace-mcp with Google OAuth credentials + browser auth)"
+echo "     (Authenticates with Google via gws CLI + browser OAuth)"
 echo ""
 echo "  5. Plaud Desktop (if needed):"
 echo "     Download from https://global.plaud.ai/pages/app-download"

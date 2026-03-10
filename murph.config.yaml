@@ -22,21 +22,30 @@ security:
     telegram.send: notify
     bop.*: require
     mcp.*: auto
-    mcp.google.send_gmail_message: require
-    mcp.google.manage_event: notify
-    mcp.google.create_drive_file: notify
-    mcp.google.create_drive_folder: notify
-    mcp.google.import_to_google_doc: notify
-    mcp.google.create_doc: notify
-    mcp.google.modify_doc_text: notify
-    mcp.google.create_spreadsheet: notify
-    mcp.google.modify_sheet_values: notify
-    mcp.google.send_message: require
-    mcp.google.manage_contact: notify
-    mcp.google.manage_task: notify
-    mcp.google.create_script_project: require
-    mcp.google.update_script_content: require
-    mcp.google.run_script_function: require
+    google.gmail.search: auto
+    google.gmail.get: auto
+    google.gmail.modify: notify
+    google.gmail.archive: notify
+    google.gmail.send: require
+    google.gmail.draft: notify
+    google.gmail.reply: require
+    google.gmail.labels.list: auto
+    google.gmail.labels.create: notify
+    google.calendar.list: auto
+    google.calendar.create: notify
+    google.tasks.list: auto
+    google.tasks.create: notify
+    google.tasks.update: notify
+    google.tasks.complete: notify
+    google.drive.list: auto
+    google.drive.get: auto
+    google.drive.create: notify
+    google.docs.get: auto
+    google.docs.create: notify
+    google.sheets.get: auto
+    google.sheets.create: notify
+    google.sheets.modify: notify
+    google.chat.send: require
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require
@@ -84,17 +93,13 @@ mcp_servers:
     transport: "stdio"
     command: "npx"
     args: ["@playwright/mcp@latest"]
-  - name: "google"
-    transport: "stdio"
-    command: "uvx"
-    args: ["workspace-mcp", "--tools", "gmail"]
-    env:
-      OAUTHLIB_INSECURE_TRANSPORT: "1"
   - name: "plaud"
     transport: "stdio"
     command: "plaud-mcp"
 
 integrations:
+  google:
+    enabled: true
   bop:
     enabled: false
   gohighlevel:

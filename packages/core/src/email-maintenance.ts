@@ -35,10 +35,17 @@ interface EmailMaintenanceConfig {
   privacy_keywords: string[];
 }
 
-interface McpManager {
-  callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<unknown>;
-  getTools(serverName?: string): Array<{ server: string; name: string; description: string; inputSchema?: unknown }>;
-  isConnected(name: string): boolean;
+/** Minimal interface for Google Workspace operations — implemented by GwsClient. */
+interface GoogleService {
+  searchEmails(query: string, maxResults: number): Promise<Array<{ id: string; subject: string; from: string; date: string; body: string }>>;
+  getEmail(messageId: string): Promise<{ id: string; subject: string; from: string; to: string; date: string; body: string } | null>;
+  modifyEmail(messageId: string, addLabels?: string[], removeLabels?: string[]): Promise<void>;
+  archiveEmail(messageId: string): Promise<void>;
+  sendEmail(to: string, subject: string, body: string, threadId?: string): Promise<void>;
+  createDraft(to: string, subject: string, body: string, threadId?: string): Promise<void>;
+  listCalendarEvents(timeMin: string, timeMax: string): Promise<Array<{ id: string; summary: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }>>;
+  createTask(taskListId: string, task: { title: string; notes?: string; due?: string }): Promise<unknown>;
+  isAuthenticated(): Promise<boolean>;
 }
 
 interface EmailDetail {
@@ -76,14 +83,6 @@ interface RunRecord {
   created_at: string;
 }
 
-const CADENCE_CRON: Record<string, string> = {
-  '15m': '*/15 * * * *',
-  '30m': '*/30 * * * *',
-  '1h': '0 * * * *',
-  '6h': '0 */6 * * *',
-  'daily': '0 9 * * *',
-};
-
 const LOOKBACK_MS: Record<string, number> = {
   '1h': 60 * 60 * 1000,
   '6h': 6 * 60 * 60 * 1000,
@@ -93,14 +92,14 @@ const LOOKBACK_MS: Record<string, number> = {
 };
 
 export class EmailMaintenanceEngine {
-  private mcpManager: McpManager;
+  private google: GoogleService;
   private pool: Pool;
   private cronJob: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private timezone: string;
 
-  constructor(mcpManager: McpManager, pool: Pool, timezone: string = 'America/Denver') {
-    this.mcpManager = mcpManager;
+  constructor(google: GoogleService, pool: Pool, timezone: string = 'America/Denver') {
+    this.google = google;
     this.pool = pool;
     this.timezone = timezone;
   }
@@ -113,13 +112,10 @@ export class EmailMaintenanceEngine {
       return;
     }
 
-    const cronExpression = CADENCE_CRON[config.cadence] ?? '0 * * * *';
-    // Use setInterval to approximate cron schedules
     const intervalMs = this.cadenceToMs(config.cadence);
 
     logger.info({ cadence: config.cadence, intervalMs }, 'Email maintenance cron started');
 
-    // Run immediately on start if enabled
     this.cronJob = setInterval(async () => {
       if (this.running) {
         logger.info('Skipping email maintenance run — previous run still in progress');
@@ -165,15 +161,10 @@ export class EmailMaintenanceEngine {
       // Create run record
       await this.createRunRecord(id, config, dryRun);
 
-      // Verify Google MCP is connected
-      if (!this.mcpManager.isConnected('google')) {
-        throw new Error('Google MCP server is not connected');
+      // Verify Google auth
+      if (!(await this.google.isAuthenticated())) {
+        throw new Error('Google Workspace is not authenticated — run: pnpm murph google-auth');
       }
-
-      // Discover available Gmail tools
-      const googleTools = this.mcpManager.getTools('google');
-      const toolNames = googleTools.map(t => t.name);
-      logger.info({ toolCount: toolNames.length }, 'Discovered Google MCP tools');
 
       // Fetch emails
       const emails = await this.fetchEmails(config);
@@ -346,132 +337,20 @@ export class EmailMaintenanceEngine {
     const query = queryParts.join(' ');
     logger.info({ query, maxResults: config.max_emails_per_run }, 'Fetching emails');
 
-    // List messages
-    let listResult: any;
     try {
-      listResult = await this.mcpManager.callTool('google', 'gmail_users_messages_list', {
-        userId: 'me',
-        q: query,
-        maxResults: config.max_emails_per_run,
-      });
+      const emails = await this.google.searchEmails(query, config.max_emails_per_run);
+
+      // Truncate body to snippet length
+      return emails.map(email => ({
+        ...email,
+        body: email.body.length > config.snippet_length
+          ? email.body.slice(0, config.snippet_length) + '...'
+          : email.body,
+      }));
     } catch (err) {
-      logger.error({ err }, 'Failed to list Gmail messages');
+      logger.error({ err }, 'Failed to fetch emails');
       return [];
     }
-
-    // Parse message IDs from list result
-    const messages = this.extractMessages(listResult);
-    if (messages.length === 0) return [];
-
-    // Fetch each message
-    const emails: Array<{ id: string; subject: string; from: string; date: string; body: string }> = [];
-    for (const msg of messages) {
-      try {
-        const detail = await this.mcpManager.callTool('google', 'gmail_users_messages_get', {
-          userId: 'me',
-          id: msg.id,
-        });
-
-        const parsed = this.parseEmailDetail(detail, config.snippet_length);
-        if (parsed) emails.push(parsed);
-
-        // 100ms delay between fetches to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (err) {
-        logger.warn({ err, messageId: msg.id }, 'Failed to fetch email detail');
-      }
-    }
-
-    return emails;
-  }
-
-  private extractMessages(listResult: unknown): Array<{ id: string }> {
-    if (!listResult) return [];
-
-    // MCP results come back in various formats
-    const data = typeof listResult === 'string' ? this.tryParse(listResult) : listResult;
-
-    if (data && typeof data === 'object') {
-      // Handle { content: [{ text: '...' }] } MCP response format
-      const content = (data as any).content;
-      if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item.type === 'text' && item.text) {
-            const parsed = this.tryParse(item.text);
-            if (parsed?.messages) return parsed.messages;
-            if (Array.isArray(parsed)) return parsed;
-          }
-        }
-      }
-
-      // Direct format
-      if ((data as any).messages) return (data as any).messages;
-      if (Array.isArray(data)) return data as Array<{ id: string }>;
-    }
-
-    return [];
-  }
-
-  private parseEmailDetail(detail: unknown, snippetLength: number): { id: string; subject: string; from: string; date: string; body: string } | null {
-    const data = typeof detail === 'string' ? this.tryParse(detail) : detail;
-    if (!data || typeof data !== 'object') return null;
-
-    // Handle MCP content wrapper
-    let emailData: any = data;
-    const content = (data as any).content;
-    if (Array.isArray(content)) {
-      for (const item of content) {
-        if (item.type === 'text' && item.text) {
-          const parsed = this.tryParse(item.text);
-          if (parsed) { emailData = parsed; break; }
-        }
-      }
-    }
-
-    const id = emailData.id ?? '';
-    const headers = emailData.payload?.headers ?? [];
-    const getHeader = (name: string) => headers.find((h: any) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
-
-    const subject = getHeader('Subject') || emailData.snippet || '(no subject)';
-    const from = getHeader('From') || '';
-    const date = getHeader('Date') || '';
-
-    // Extract body text
-    let body = emailData.snippet ?? '';
-    const payload = emailData.payload;
-    if (payload) {
-      const textBody = this.extractBodyText(payload);
-      if (textBody) body = textBody;
-    }
-
-    // Truncate to snippet length
-    if (body.length > snippetLength) {
-      body = body.slice(0, snippetLength) + '...';
-    }
-
-    return { id, subject, from, date, body };
-  }
-
-  private extractBodyText(payload: any): string {
-    // Check direct body
-    if (payload.body?.data) {
-      return Buffer.from(payload.body.data, 'base64url').toString('utf-8');
-    }
-
-    // Check parts recursively
-    if (payload.parts) {
-      for (const part of payload.parts) {
-        if (part.mimeType === 'text/plain' && part.body?.data) {
-          return Buffer.from(part.body.data, 'base64url').toString('utf-8');
-        }
-        if (part.parts) {
-          const nested = this.extractBodyText(part);
-          if (nested) return nested;
-        }
-      }
-    }
-
-    return '';
   }
 
   private privacyScrub(
@@ -566,35 +445,14 @@ Return ONLY the JSON array, no other text.`;
       const now = new Date();
       const fiveDaysOut = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
 
-      const result = await this.mcpManager.callTool('google', 'calendar_events_list', {
-        calendarId: 'primary',
-        timeMin: now.toISOString(),
-        timeMax: fiveDaysOut.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 50,
-      });
-
-      const data = typeof result === 'string' ? this.tryParse(result) : result;
-      if (!data) return 'Unable to fetch calendar events.';
-
-      // Parse events from MCP response
-      let events: any[] = [];
-      const content = (data as any).content;
-      if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item.type === 'text' && item.text) {
-            const parsed = this.tryParse(item.text);
-            if (parsed?.items) { events = parsed.items; break; }
-          }
-        }
-      } else if ((data as any).items) {
-        events = (data as any).items;
-      }
+      const events = await this.google.listCalendarEvents(
+        now.toISOString(),
+        fiveDaysOut.toISOString(),
+      );
 
       if (events.length === 0) return 'Calendar is open for the next 5 business days.';
 
-      const eventLines = events.map((e: any) => {
+      const eventLines = events.map((e) => {
         const start = e.start?.dateTime || e.start?.date || '';
         const end = e.end?.dateTime || e.end?.date || '';
         return `- ${e.summary ?? 'Busy'}: ${start} to ${end}`;
@@ -617,11 +475,7 @@ Return ONLY the JSON array, no other text.`;
     // Mark as read
     if (actions.includes('mark_read') && config.mark_read) {
       try {
-        await this.mcpManager.callTool('google', 'gmail_users_messages_modify', {
-          userId: 'me',
-          id: decision.message_id,
-          removeLabelIds: ['UNREAD'],
-        });
+        await this.google.modifyEmail(decision.message_id, undefined, ['UNREAD']);
         counters.marked_read++;
       } catch (err) {
         logger.warn({ err, messageId: decision.message_id }, 'Failed to mark email as read');
@@ -631,11 +485,7 @@ Return ONLY the JSON array, no other text.`;
     // Archive
     if (actions.includes('archive') && config.archive) {
       try {
-        await this.mcpManager.callTool('google', 'gmail_users_messages_modify', {
-          userId: 'me',
-          id: decision.message_id,
-          removeLabelIds: ['INBOX'],
-        });
+        await this.google.archiveEmail(decision.message_id);
         counters.archived++;
       } catch (err) {
         logger.warn({ err, messageId: decision.message_id }, 'Failed to archive email');
@@ -645,11 +495,7 @@ Return ONLY the JSON array, no other text.`;
     // Apply label
     if (actions.includes('apply_label') && config.apply_label) {
       try {
-        await this.mcpManager.callTool('google', 'gmail_users_messages_modify', {
-          userId: 'me',
-          id: decision.message_id,
-          addLabelIds: [config.apply_label],
-        });
+        await this.google.modifyEmail(decision.message_id, [config.apply_label]);
         counters.labeled++;
       } catch (err) {
         logger.warn({ err, messageId: decision.message_id }, 'Failed to apply label');
@@ -659,22 +505,11 @@ Return ONLY the JSON array, no other text.`;
     // Reply
     if (decision.reply?.body && config.reply_enabled) {
       try {
+        const replySubject = decision.subject.startsWith('Re:') ? decision.subject : `Re: ${decision.subject}`;
         if (config.reply_mode === 'draft') {
-          await this.mcpManager.callTool('google', 'gmail_users_drafts_create', {
-            userId: 'me',
-            message: {
-              threadId: decision.message_id,
-              raw: this.buildReplyRaw(decision.from, decision.subject, decision.reply.body),
-            },
-          });
+          await this.google.createDraft(decision.from, replySubject, decision.reply.body, decision.message_id);
         } else {
-          await this.mcpManager.callTool('google', 'gmail_users_messages_send', {
-            userId: 'me',
-            message: {
-              threadId: decision.message_id,
-              raw: this.buildReplyRaw(decision.from, decision.subject, decision.reply.body),
-            },
-          });
+          await this.google.sendEmail(decision.from, replySubject, decision.reply.body, decision.message_id);
         }
         counters.replied++;
       } catch (err) {
@@ -685,12 +520,9 @@ Return ONLY the JSON array, no other text.`;
     // Forward
     if (decision.forward && config.forward_to) {
       try {
-        await this.mcpManager.callTool('google', 'gmail_users_messages_send', {
-          userId: 'me',
-          message: {
-            raw: this.buildForwardRaw(config.forward_to, decision.subject, decision.from),
-          },
-        });
+        const fwdSubject = decision.subject.startsWith('Fwd:') ? decision.subject : `Fwd: ${decision.subject}`;
+        const fwdBody = `Forwarded from: ${decision.from}\n\n(See original message in thread)`;
+        await this.google.sendEmail(config.forward_to, fwdSubject, fwdBody);
         counters.forwarded++;
       } catch (err) {
         logger.warn({ err, messageId: decision.message_id }, 'Failed to forward email');
@@ -700,8 +532,7 @@ Return ONLY the JSON array, no other text.`;
     // Create task
     if (decision.task && config.auto_tasking) {
       try {
-        await this.mcpManager.callTool('google', 'tasks_tasks_insert', {
-          tasklist: config.task_list,
+        await this.google.createTask(config.task_list, {
           title: decision.task.title,
           notes: decision.task.notes,
           due: decision.task.due ? new Date(decision.task.due).toISOString() : undefined,
@@ -711,19 +542,6 @@ Return ONLY the JSON array, no other text.`;
         logger.warn({ err, messageId: decision.message_id }, 'Failed to create task');
       }
     }
-  }
-
-  private buildReplyRaw(to: string, subject: string, body: string): string {
-    const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
-    const raw = `To: ${to}\r\nSubject: ${replySubject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`;
-    return Buffer.from(raw).toString('base64url');
-  }
-
-  private buildForwardRaw(to: string, subject: string, originalFrom: string): string {
-    const fwdSubject = subject.startsWith('Fwd:') ? subject : `Fwd: ${subject}`;
-    const body = `Forwarded from: ${originalFrom}\n\n(See original message in thread)`;
-    const raw = `To: ${to}\r\nSubject: ${fwdSubject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`;
-    return Buffer.from(raw).toString('base64url');
   }
 
   private callClaude(model: string, prompt: string): Promise<string> {
@@ -769,14 +587,6 @@ Return ONLY the JSON array, no other text.`;
     const trimmed = text.trim();
     const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/);
     return match ? match[1].trim() : trimmed;
-  }
-
-  private tryParse(text: string): any {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
   }
 
   private cadenceToMs(cadence: string): number {

@@ -21,6 +21,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - `@murph/channel-telegram` — grammY Telegram bot with user allowlist
 - `@murph/channel-imessage` — Direct iMessage database poller + AppleScript sender
 - `@murph/mcp-client` — Multi-server MCP client (stdio + HTTP)
+- `@murph/integration-google` — Native Google Workspace integration (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Chat) via `gws` CLI
 - `@murph/integration-bop` — BOP Framework hive mind (WebSocket provider + consumer)
 - `@murph/scheduler` — croner-based cron engine with natural language parsing
 - `@murph/creator` — Dynamic software creation + Cloudflare Pages deployment
@@ -78,42 +79,50 @@ PostgreSQL with tables: messages, entities, memories (pgvector), audit_log, secr
 
 ## Google Workspace Integration
 
-Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Forms, Chat) is integrated via [`workspace-mcp`](https://github.com/taylorwilsdon/google_workspace_mcp), a Python MCP server that runs via `uvx workspace-mcp` (stdio transport).
+Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Chat) is integrated natively via the `@murph/integration-google` package, which wraps the [`gws` CLI](https://github.com/googleworkspace/cli) (`@googleworkspace/cli`).
 
 **Requirements:**
-- `uv` Python package manager (installed via `brew install uv`)
-- Google Cloud OAuth 2.0 **Web Application** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars) — each user creates their own Google Cloud project and Web Application OAuth client with redirect URI `http://localhost:8000/oauth2callback`
-- Enable all required APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides, Forms, Chat, People (Contacts), Apps Script, Custom Search
-- Under OAuth consent screen: add your Google account as a test user, and configure Data Access scopes for all enabled APIs
+- `gws` CLI (installed via `npm install -g @googleworkspace/cli`)
+- Google Cloud project with OAuth 2.0 **Desktop app** credentials (download `client_secret.json` to `~/.config/gws/`)
+- Enable required APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Chat
 
-**Setup:** `pnpm murph google-auth` — prompts for Google OAuth Client ID and Secret, stores them in `~/.zshrc`, and runs `uvx workspace-mcp` to complete browser-based OAuth. If credentials already exist, it prompts to re-authenticate (clears tokens and re-runs OAuth). Can also be triggered from the dashboard Settings page.
+**Setup:** `pnpm murph google-auth` — checks for `gws` CLI (installs if missing), runs `gws auth login` which opens browser for OAuth consent. If already authenticated, prompts to re-authenticate. Can also be triggered from the dashboard Settings page.
 
 **How it works:**
-- The `uvx workspace-mcp --tool-tier core` command runs as an MCP server (stdio transport) alongside the agent
-- OAuth tokens are stored locally in `~/.google_workspace_mcp/`
-- `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` must be set in the environment (stored in `~/.zshrc`, captured by launchd plist)
-- `OAUTHLIB_INSECURE_TRANSPORT=1` is set in the MCP server env (required for localhost OAuth callback)
-- Write actions (send email, create/modify docs, manage events) go through approval gates
-- Read actions (list emails, view calendar, search Drive) are auto-approved via `mcp.*: auto`
-- To refresh expired tokens: run `pnpm murph google-auth` and choose to re-authenticate
+- `@murph/integration-google` provides a `GwsClient` class that shells out to `gws` CLI commands and parses JSON output
+- Tools are registered in the `google.*` namespace in the action registry (e.g. `google.gmail.search`, `google.calendar.list`)
+- `gws` handles token refresh automatically — access tokens expire after 1 hour and are refreshed using the stored refresh_token
+- OAuth credentials are stored and encrypted by `gws` itself in `~/.config/gws/` (AES-256-GCM)
+- `gws` uses dynamic scope minimization — only requests scopes needed for each API method
+- No environment variables needed (`GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` are no longer required)
+- Write actions go through approval gates; read actions are auto-approved
+- If Google revokes the token, the agent logs a warning; re-run `pnpm murph google-auth`
 
-**Approval defaults for Google MCP actions (matching workspace-mcp core tier tool names):**
-- `mcp.google.send_gmail_message` → `require`
-- `mcp.google.send_message` (Chat) → `require`
-- `mcp.google.manage_event` → `notify`
-- `mcp.google.create_drive_file` → `notify`
-- `mcp.google.create_drive_folder` → `notify`
-- `mcp.google.import_to_google_doc` → `notify`
-- `mcp.google.create_doc` → `notify`
-- `mcp.google.modify_doc_text` → `notify`
-- `mcp.google.create_spreadsheet` → `notify`
-- `mcp.google.modify_sheet_values` → `notify`
-- `mcp.google.manage_contact` → `notify`
-- `mcp.google.manage_task` → `notify`
-- `mcp.google.create_script_project` → `require`
-- `mcp.google.update_script_content` → `require`
-- `mcp.google.run_script_function` → `require`
-- All other Google MCP actions → `auto` (inherited from `mcp.*`)
+**Approval defaults for Google actions:**
+- `google.gmail.search` → `auto`
+- `google.gmail.get` → `auto`
+- `google.gmail.modify` → `notify`
+- `google.gmail.archive` → `notify`
+- `google.gmail.send` → `require`
+- `google.gmail.draft` → `notify`
+- `google.gmail.reply` → `require`
+- `google.gmail.labels.list` → `auto`
+- `google.gmail.labels.create` → `notify`
+- `google.calendar.list` → `auto`
+- `google.calendar.create` → `notify`
+- `google.tasks.list` → `auto`
+- `google.tasks.create` → `notify`
+- `google.tasks.update` → `notify`
+- `google.tasks.complete` → `notify`
+- `google.drive.list` → `auto`
+- `google.drive.get` → `auto`
+- `google.drive.create` → `notify`
+- `google.docs.get` → `auto`
+- `google.docs.create` → `notify`
+- `google.sheets.get` → `auto`
+- `google.sheets.create` → `notify`
+- `google.sheets.modify` → `notify`
+- `google.chat.send` → `require`
 
 ## Plaud Integration
 

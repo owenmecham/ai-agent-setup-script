@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@murph/channel-imessage": "workspace:*",
+    "@murph/integration-google": "workspace:*",
     "@murph/mcp-client": "workspace:*",
     "@murph/config": "workspace:*",
     "@murph/memory": "workspace:*",

@@ -202,6 +202,21 @@ async function main() {
         }
       }
 
+      // Wire up native Google Workspace integration
+      let gwsClient: import('@murph/integration-google').GwsClient | null = null;
+      try {
+        const { GwsClient, registerGoogleTools } = await import('@murph/integration-google');
+        gwsClient = new GwsClient();
+        if (await gwsClient.isAuthenticated()) {
+          registerGoogleTools(agent.getRegistry(), gwsClient);
+          logger.info('Google Workspace connected (native gws)');
+        } else {
+          logger.warn('Google Workspace not authenticated — run: pnpm murph google-auth');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to initialize Google Workspace');
+      }
+
       // Register profile.update action
       agent.getRegistry().register({
         name: 'profile.update',
@@ -382,11 +397,11 @@ async function main() {
 
       // Wire up email maintenance engine
       let emailMaintenanceEngine: import('./email-maintenance.js').EmailMaintenanceEngine | null = null;
-      if (config.email_maintenance.enabled && mcpManager) {
+      if (config.email_maintenance.enabled && gwsClient) {
         try {
           const { EmailMaintenanceEngine } = await import('./email-maintenance.js');
           const emPool = getPool(config.database.url);
-          emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager, emPool, config.agent.timezone);
+          emailMaintenanceEngine = new EmailMaintenanceEngine(gwsClient, emPool, config.agent.timezone);
           emailMaintenanceEngine.startCron(config.email_maintenance);
           agent.setEmailMaintenance(emailMaintenanceEngine);
           logger.info('Email maintenance engine started');
@@ -405,11 +420,11 @@ async function main() {
               if (emailMaintenanceEngine) {
                 emailMaintenanceEngine.reconfigure(event.current.email_maintenance);
                 logger.info('Email maintenance engine reconfigured');
-              } else if (event.current.email_maintenance.enabled && mcpManager) {
+              } else if (event.current.email_maintenance.enabled && gwsClient) {
                 // Engine wasn't created before, create now
                 import('./email-maintenance.js').then(({ EmailMaintenanceEngine }) => {
                   const emPool = getPool(config.database.url);
-                  emailMaintenanceEngine = new EmailMaintenanceEngine(mcpManager!, emPool, event.current.agent.timezone);
+                  emailMaintenanceEngine = new EmailMaintenanceEngine(gwsClient!, emPool, event.current.agent.timezone);
                   emailMaintenanceEngine.startCron(event.current.email_maintenance);
                   agent.setEmailMaintenance(emailMaintenanceEngine);
                   logger.info('Email maintenance engine started after config change');
@@ -555,262 +570,111 @@ async function main() {
     }
 
     case 'google-auth': {
-      const { execSync, spawnSync } = await import('node:child_process');
-      const { existsSync: fileExists, readFileSync: readFile, appendFileSync } = await import('node:fs');
-      const { homedir: getHome } = await import('node:os');
+      const { execSync, spawn: spawnAsync } = await import('node:child_process');
       const { createInterface } = await import('node:readline');
 
-      const home = getHome();
-
-      console.log('Google Workspace MCP Setup (workspace-mcp)');
+      console.log('Google Workspace Setup (gws CLI)');
       console.log('─'.repeat(50));
       console.log('');
 
-      // 1. Check uv/uvx
+      // 1. Check/install gws CLI
+      let gwsAvailable = false;
       try {
-        execSync('which uvx', { stdio: 'ignore' });
-        console.log('✓ uvx is available');
-      } catch {
-        console.error('✗ uvx not found. Install uv first: brew install uv');
-        process.exit(1);
-      }
+        execSync('which gws', { stdio: 'ignore' });
+        gwsAvailable = true;
+      } catch {}
 
-      // 2. Prompt for OAuth credentials
-      console.log('');
-      console.log('You need a Google Cloud OAuth 2.0 Web Application client.');
-      console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
-      console.log('  2. Create your own Google Cloud project (if you haven\'t already)');
-      console.log('  3. Create an OAuth 2.0 Client ID (type: Web application)');
-      console.log('  4. Under "Authorized redirect URIs", add: http://localhost:8000/oauth2callback');
-      console.log('  5. Enable these APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides,');
-      console.log('     Forms, Chat, People (Contacts), Apps Script, Custom Search');
-      console.log('  6. Under OAuth consent screen → Audience, add your Google account as a test user');
-      console.log('  7. Under OAuth consent screen → Data Access, add scopes for all enabled APIs');
-      console.log('');
-
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
-
-      const existingClientId = process.env.GOOGLE_OAUTH_CLIENT_ID ?? '';
-      const existingClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '';
-
-      let clientId = existingClientId;
-      let clientSecret = existingClientSecret;
-
-      if (existingClientId && existingClientSecret) {
-        console.log(`Existing credentials found (Client ID: ${existingClientId.substring(0, 20)}...)`);
-        const reuse = await ask('Use existing credentials? (Y/n) ');
-        if (reuse.toLowerCase() === 'n') {
-          clientId = '';
-          clientSecret = '';
-        }
-      }
-
-      if (!clientId) {
-        clientId = (await ask('Google OAuth Client ID: ')).trim();
-        if (!clientId) {
-          console.error('✗ Client ID is required.');
-          rl.close();
-          process.exit(1);
-        }
-      }
-
-      if (!clientSecret) {
-        clientSecret = (await ask('Google OAuth Client Secret: ')).trim();
-        if (!clientSecret) {
-          console.error('✗ Client Secret is required.');
-          rl.close();
-          process.exit(1);
-        }
-      }
-
-      // 3. Store env vars in ~/.zshrc
-      const zshrcPath = `${home}/.zshrc`;
-      const { writeFileSync: writeFile } = await import('node:fs');
-
-      let zshrcContent = '';
-      try {
-        zshrcContent = readFile(zshrcPath, 'utf-8');
-      } catch {
-        // File doesn't exist yet
-      }
-
-      const envVars: Record<string, string> = {
-        GOOGLE_OAUTH_CLIENT_ID: clientId,
-        GOOGLE_OAUTH_CLIENT_SECRET: clientSecret,
-      };
-
-      let envUpdated = false;
-      for (const [key, value] of Object.entries(envVars)) {
-        const exportLine = `export ${key}="${value}"`;
-        const regex = new RegExp(`^export ${key}=.*$`, 'm');
-        if (regex.test(zshrcContent)) {
-          zshrcContent = zshrcContent.replace(regex, exportLine);
-          envUpdated = true;
-        } else {
-          zshrcContent += `\n${exportLine}\n`;
-          envUpdated = true;
-        }
-      }
-
-      if (envUpdated) {
-        writeFile(zshrcPath, zshrcContent, 'utf-8');
-        console.log('');
-        console.log('✓ Environment variables saved to ~/.zshrc');
-      }
-
-      // Set in current process for the OAuth flow
-      process.env.GOOGLE_OAUTH_CLIENT_ID = clientId;
-      process.env.GOOGLE_OAUTH_CLIENT_SECRET = clientSecret;
-
-      // 4. Start workspace-mcp in stdio mode and send MCP messages to trigger OAuth.
-      // workspace-mcp only initiates the OAuth browser flow when a tool is called
-      // and no credentials exist. We act as a minimal MCP client: initialize, then
-      // call a lightweight tool (gmail list_labels). The server prints the Google
-      // auth URL to stderr and opens a callback listener on localhost:8000.
-      const { spawn: spawnAsync } = await import('node:child_process');
-      const { readdirSync } = await import('node:fs');
-      const credDir = `${home}/.google_workspace_mcp/credentials`;
-
-      const hasCredFiles = (): boolean => {
+      if (!gwsAvailable) {
+        console.log('Installing @googleworkspace/cli...');
         try {
-          const files = readdirSync(credDir);
-          return files.some(f => f.endsWith('.json'));
-        } catch { return false; }
-      };
+          execSync('npm install -g @googleworkspace/cli', { stdio: 'inherit' });
+          console.log('✓ gws CLI installed');
+        } catch {
+          console.error('✗ Failed to install @googleworkspace/cli');
+          console.error('  Try manually: npm install -g @googleworkspace/cli');
+          process.exit(1);
+        }
+      } else {
+        console.log('✓ gws CLI is available');
+      }
 
-      if (hasCredFiles()) {
+      // 2. Check current auth status
+      const { GwsClient } = await import('@murph/integration-google');
+      const authCheckClient = new GwsClient();
+      const alreadyAuthenticated = await authCheckClient.isAuthenticated();
+
+      if (alreadyAuthenticated) {
         console.log('');
-        console.log('Google Workspace credentials already exist.');
-        const reauth = await ask('Re-authenticate? This will clear existing tokens. (y/N) ');
-        if (reauth.toLowerCase() === 'y') {
-          const { rmSync } = await import('node:fs');
-          rmSync(credDir, { recursive: true, force: true });
-          console.log('✓ Cleared existing credentials.');
-        } else {
+        console.log('Google Workspace is already authenticated.');
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const ask = (q: string): Promise<string> => new Promise((resolve) => rl.question(q, resolve));
+        const reauth = await ask('Re-authenticate? (y/N) ');
+        rl.close();
+        if (reauth.toLowerCase() !== 'y') {
           console.log('  Keeping existing credentials.');
-          rl.close();
           process.exit(0);
         }
       }
 
-      rl.close();
+      // 3. Run gws auth login (opens browser for OAuth consent)
+      console.log('');
+      console.log('Starting Google authorization...');
+      console.log('A browser window will open for Google OAuth consent.');
+      console.log('');
+      console.log('If you haven\'t set up a Google Cloud project yet:');
+      console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
+      console.log('  2. Create a project and OAuth 2.0 Client ID (type: Desktop app)');
+      console.log('  3. Download the client_secret.json to ~/.config/gws/');
+      console.log('  4. Enable the APIs you need (Gmail, Calendar, Drive, Tasks, etc.)');
+      console.log('');
 
-      if (!hasCredFiles()) {
-        console.log('');
-        console.log('Starting workspace-mcp to initiate OAuth...');
-        console.log('A browser window should open for Google authorization.');
-        console.log('');
-
-        const authProc = spawnAsync('uvx', [
-          'workspace-mcp', '--single-user', '--tools', 'gmail',
-        ], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret, OAUTHLIB_INSECURE_TRANSPORT: '1' },
+      try {
+        const authProc = spawnAsync('gws', ['auth', 'login'], {
+          stdio: 'inherit',
         });
 
-        // Watch stderr for OAuth URLs and status
-        let authUrlOpened = false;
-        authProc.stderr?.on('data', (chunk: Buffer) => {
-          const text = chunk.toString();
-          process.stderr.write(text);
-          const urlMatch = text.match(/https:\/\/accounts\.google\.com[^\s")\]]+/);
-          if (urlMatch && !authUrlOpened) {
-            authUrlOpened = true;
-            console.log('');
-            console.log('Opening Google authorization in browser...');
-            try { spawnAsync('open', [urlMatch[0]], { stdio: 'ignore', detached: true }).unref(); } catch {}
-          }
+        await new Promise<void>((resolve, reject) => {
+          authProc.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`gws auth login exited with code ${code}`));
+          });
+          authProc.on('error', reject);
         });
 
-        // Also check stdout for auth URLs (some versions output there)
-        authProc.stdout?.on('data', (chunk: Buffer) => {
-          const text = chunk.toString();
-          const urlMatch = text.match(/https:\/\/accounts\.google\.com[^\s")\]]+/);
-          if (urlMatch && !authUrlOpened) {
-            authUrlOpened = true;
-            console.log('');
-            console.log('Opening Google authorization in browser...');
-            try { spawnAsync('open', [urlMatch[0]], { stdio: 'ignore', detached: true }).unref(); } catch {}
-          }
-        });
-
-        // Wait for server to start, then send MCP initialize + tool call
-        await new Promise(r => setTimeout(r, 3000));
-
-        const sendJsonRpc = (msg: object) => {
-          const json = JSON.stringify(msg);
-          try { authProc.stdin?.write(json + '\n'); } catch {}
-        };
-
-        // MCP initialize
-        sendJsonRpc({
-          jsonrpc: '2.0', id: 1, method: 'initialize',
-          params: {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'murph-auth', version: '1.0.0' },
-          },
-        });
-
-        await new Promise(r => setTimeout(r, 1000));
-
-        // Send initialized notification
-        sendJsonRpc({ jsonrpc: '2.0', method: 'notifications/initialized' });
-
-        await new Promise(r => setTimeout(r, 500));
-
-        // Call a Gmail tool to trigger OAuth — must match the --tools flag used above
-        // user_google_email is required by the schema; in --single-user mode any value works
-        sendJsonRpc({
-          jsonrpc: '2.0', id: 2, method: 'tools/call',
-          params: { name: 'list_gmail_labels', arguments: { user_google_email: 'auth@pending' } },
-        });
-
-        // Poll for credential files (max 3 minutes)
-        let authSuccess = false;
-        for (let i = 0; i < 180; i++) {
-          await new Promise(r => setTimeout(r, 1000));
-          if (hasCredFiles()) {
-            authSuccess = true;
-            break;
-          }
-        }
-
-        // Kill the MCP server
-        try { authProc.kill(); } catch {}
+        // Verify auth worked
+        const verifyClient = new GwsClient();
+        const verified = await verifyClient.isAuthenticated();
 
         console.log('');
-        if (authSuccess) {
+        if (verified) {
           console.log('✓ Google Workspace authentication successful!');
         } else {
-          console.log('! Could not verify credentials at ~/.google_workspace_mcp/credentials/');
-          console.log('  If a browser opened, complete the Google authorization and re-run.');
+          console.log('! Authentication may not have completed.');
           console.log('  Re-run: pnpm murph google-auth');
         }
+      } catch (err) {
+        console.error('');
+        console.error('✗ Authentication failed.');
+        console.error(`  ${err instanceof Error ? err.message : String(err)}`);
+        console.error('');
+        console.error('Troubleshooting:');
+        console.error('  - Ensure you have a client_secret.json in ~/.config/gws/');
+        console.error('  - Or run: gws auth setup (requires gcloud CLI)');
+        console.error('  - Then re-run: pnpm murph google-auth');
+        process.exit(1);
       }
 
       console.log('');
-      console.log('Google Workspace is now connected via workspace-mcp. Available services:');
+      console.log('Google Workspace is connected via gws. Available services:');
       console.log('  • Gmail — read, search, send email');
       console.log('  • Calendar — view and manage events');
       console.log('  • Tasks — manage task lists');
       console.log('  • Drive — search, read, and manage files');
       console.log('  • Docs — read and edit documents');
       console.log('  • Sheets — read and edit spreadsheets');
-      console.log('  • Slides — read and edit presentations');
-      console.log('  • Forms — read form responses');
       console.log('  • Chat — send messages');
       console.log('');
-      console.log('The Google MCP server is configured in murph.config.yaml.');
-      console.log('');
-      if (envUpdated) {
-        console.log('Next steps:');
-        console.log('  1. Regenerate LaunchAgent plist: node packages/installer/dist/server.js');
-        console.log('  2. Or restart Murph: pnpm murph start');
-      } else {
-        console.log('Restart Murph to activate: pnpm murph start');
-      }
+      console.log('Restart Murph to activate: pnpm murph start');
       break;
     }
 
