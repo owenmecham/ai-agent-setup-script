@@ -13,6 +13,7 @@ export interface ScheduledTask {
   channel?: string;
   conversationId?: string;
   enabled: boolean;
+  oneShot: boolean;
   lastRunAt?: Date;
   nextRunAt?: Date;
 }
@@ -56,10 +57,10 @@ export class Scheduler {
 
   async createTask(task: Omit<ScheduledTask, 'id' | 'lastRunAt' | 'nextRunAt'>): Promise<ScheduledTask> {
     const result = await this.pool.query(
-      `INSERT INTO scheduled_tasks (name, cron_expression, action, parameters, channel, conversation_id, enabled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO scheduled_tasks (name, cron_expression, action, parameters, channel, conversation_id, enabled, one_shot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [task.name, task.cronExpression, task.action, JSON.stringify(task.parameters), task.channel, task.conversationId, task.enabled],
+      [task.name, task.cronExpression, task.action, JSON.stringify(task.parameters), task.channel, task.conversationId, task.enabled, task.oneShot ?? false],
     );
 
     const created = this.rowToTask(result.rows[0]);
@@ -81,6 +82,7 @@ export class Scheduler {
     if (updates.action !== undefined) { sets.push(`action = $${idx++}`); params.push(updates.action); }
     if (updates.parameters !== undefined) { sets.push(`parameters = $${idx++}`); params.push(JSON.stringify(updates.parameters)); }
     if (updates.enabled !== undefined) { sets.push(`enabled = $${idx++}`); params.push(updates.enabled); }
+    if (updates.oneShot !== undefined) { sets.push(`one_shot = $${idx++}`); params.push(updates.oneShot); }
 
     sets.push(`updated_at = NOW()`);
     params.push(id);
@@ -139,6 +141,10 @@ export class Scheduler {
         if (this.executor) {
           await this.executor(task);
         }
+        if (task.oneShot) {
+          logger.info({ taskId: task.id, name: task.name }, 'One-shot task completed, deleting');
+          await this.deleteTask(task.id);
+        }
       });
 
       this.jobs.set(task.id, job);
@@ -157,6 +163,7 @@ export class Scheduler {
       channel: row.channel as string | undefined,
       conversationId: row.conversation_id as string | undefined,
       enabled: row.enabled as boolean,
+      oneShot: (row.one_shot as boolean) ?? false,
       lastRunAt: row.last_run_at as Date | undefined,
       nextRunAt: row.next_run_at as Date | undefined,
     };

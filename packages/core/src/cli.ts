@@ -287,7 +287,7 @@ async function main() {
 
         agent.getRegistry().register({
           name: 'scheduler.create',
-          description: 'Create a scheduled task. Params: name (string), cronExpression (string, e.g. "0 9 * * *"), action (string — action to run), parameters (object, optional), enabled (boolean, default true)',
+          description: 'Create a scheduled task. Params: name (string), cronExpression (string, e.g. "0 9 * * *"), action (string — action to run), parameters (object, optional), enabled (boolean, default true), oneShot (boolean, default false — if true, task is automatically deleted after it fires once)',
           parameterSchema: {
             type: 'object',
             required: ['name', 'cronExpression', 'action'],
@@ -297,6 +297,7 @@ async function main() {
               action: { type: 'string' },
               parameters: { type: 'object' },
               enabled: { type: 'boolean' },
+              oneShot: { type: 'boolean', description: 'If true, task is deleted after firing once. Use for one-time reminders.' },
             },
           },
           execute: async (params) => {
@@ -307,6 +308,7 @@ async function main() {
                 action: params.action as string,
                 parameters: (params.parameters as Record<string, unknown>) ?? {},
                 enabled: params.enabled !== false,
+                oneShot: params.oneShot === true,
               });
               return { actionId: '', success: true, data: task };
             } catch (err) {
