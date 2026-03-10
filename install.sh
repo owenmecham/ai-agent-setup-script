@@ -13,13 +13,6 @@ installing() { echo -e "${YELLOW}Installing...${NC}"; }
 skip() { echo -e "${GREEN}Already installed${NC}"; }
 fail() { echo -e "${RED}FAILED${NC}"; echo "  $1"; }
 
-# Ensure brew runs under native ARM on Apple Silicon (avoids Rosetta 2 conflicts)
-if [ "$(uname -m)" = "arm64" ] || [ -d /opt/homebrew ]; then
-  brew() { arch -arm64 /opt/homebrew/bin/brew "$@"; }
-elif [ -x /usr/local/bin/brew ]; then
-  brew() { /usr/local/bin/brew "$@"; }
-fi
-
 # Parse flags
 UPDATE_ONLY=false
 SKIP_CONFIRM=false
@@ -285,7 +278,7 @@ fi
 
 # 3. Homebrew
 check "Homebrew"
-if command -v brew &>/dev/null; then
+if [ -x /opt/homebrew/bin/brew ] || [ -x /usr/local/bin/brew ]; then
   skip
 else
   installing
@@ -297,6 +290,13 @@ else
     eval "$(/usr/local/bin/brew shellenv)"
   fi
   ok
+fi
+
+# Define brew() wrapper to ensure native ARM execution on Apple Silicon
+if [ "$(uname -m)" = "arm64" ] && [ -x /opt/homebrew/bin/brew ]; then
+  brew() { arch -arm64 /opt/homebrew/bin/brew "$@"; }
+elif [ -x /usr/local/bin/brew ]; then
+  brew() { /usr/local/bin/brew "$@"; }
 fi
 
 # 4. Git
