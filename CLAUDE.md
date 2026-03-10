@@ -82,7 +82,7 @@ Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Slides, Forms, Ch
 
 **Requirements:**
 - `uv` Python package manager (installed via `brew install uv`)
-- Google Cloud OAuth 2.0 **Web Application** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars) — the credential must have `http://localhost:8000/oauth2callback` as an authorized redirect URI
+- Google Cloud OAuth 2.0 **Desktop** credentials (`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` env vars) — each user creates their own Google Cloud project and Desktop OAuth client (no redirect URI needed)
 - Enable all required APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Slides, Forms, Chat, People (Contacts), Apps Script, Custom Search
 - Under OAuth consent screen: add your Google account as a test user, and configure Data Access scopes for all enabled APIs
 
