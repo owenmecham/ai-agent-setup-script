@@ -129,11 +129,16 @@ if ! command -v pnpm &>/dev/null; then
 fi
 echo "pnpm: $(pnpm --version)"
 
-# --- 5. Extract payload to ~/murph ---
-# The installer wizard steps will handle this via the extract-payload step,
-# but we also extract the installer's own dist here so the wizard can run.
-# Clean existing install to prevent stale files from persisting.
-if [ -f "$RESOURCES_DIR/murph-payload.tar.gz" ]; then
+# --- 5. Install/update code at ~/murph ---
+# If ~/murph is a git clone, update in place (preserving source files).
+# Otherwise, extract the pre-built payload tarball from the .app bundle.
+if [ -d "$INSTALL_DIR/.git" ]; then
+  echo "Detected git clone at $INSTALL_DIR, updating in place..."
+  (cd "$INSTALL_DIR" && git pull --ff-only 2>&1 || echo "WARNING: git pull failed, continuing with existing code")
+  (cd "$INSTALL_DIR" && pnpm install 2>&1)
+  (cd "$INSTALL_DIR" && pnpm build 2>&1)
+  echo "Code updated"
+elif [ -f "$RESOURCES_DIR/murph-payload.tar.gz" ]; then
   echo "Extracting Murph to $INSTALL_DIR..."
   if [ -d "$INSTALL_DIR/packages" ]; then
     echo "Removing old packages directory..."
