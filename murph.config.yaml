@@ -87,7 +87,7 @@ mcp_servers:
   - name: "google"
     transport: "stdio"
     command: "uvx"
-    args: ["workspace-mcp", "--tool-tier", "core"]
+    args: ["workspace-mcp", "--tools", "gmail"]
     env:
       OAUTHLIB_INSECURE_TRANSPORT: "1"
   - name: "plaud"

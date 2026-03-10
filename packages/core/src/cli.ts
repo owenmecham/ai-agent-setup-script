@@ -702,7 +702,7 @@ async function main() {
         console.log('');
 
         const authProc = spawnAsync('uvx', [
-          'workspace-mcp', '--single-user', '--tool-tier', 'core',
+          'workspace-mcp', '--single-user', '--tools', 'gmail',
         ], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env, GOOGLE_OAUTH_CLIENT_ID: clientId, GOOGLE_OAUTH_CLIENT_SECRET: clientSecret, OAUTHLIB_INSECURE_TRANSPORT: '1' },
