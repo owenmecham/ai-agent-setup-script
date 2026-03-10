@@ -780,6 +780,10 @@ echo "Update shortcut: ~/Desktop/Update Murph.app"
 echo ""
 
 # Launch the setup wizard to finish configuration
+# Kill any leftover wizard from a previous run
+lsof -ti :3142 2>/dev/null | xargs kill 2>/dev/null || true
+sleep 1
+
 echo "Launching setup wizard..."
 cd "$INSTALL_DIR"
 node packages/installer/dist/server.js &
