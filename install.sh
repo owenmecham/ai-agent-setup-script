@@ -336,8 +336,13 @@ ok
 # Change to install directory for remaining steps
 cd "$INSTALL_DIR"
 
-# Pre-create ~/.cache so sudo corepack doesn't create it as root
+# Ensure ~/.cache exists and is owned by current user.
+# A previous run's sudo commands may have created it as root,
+# which blocks the Claude Code installer from writing ~/.cache/claude.
 mkdir -p "$HOME/.cache"
+if [ "$(stat -f '%u' "$HOME/.cache")" != "$(id -u)" ]; then
+  sudo chown "$(id -u):$(id -g)" "$HOME/.cache"
+fi
 
 # 6. Node.js (official .pkg installer)
 check "Node.js 22+"
