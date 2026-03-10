@@ -50,7 +50,7 @@ export function runCommand(
     const proc = spawn(finalCommand, finalArgs, {
       cwd: options?.cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: { ...process.env, CI: 'true' },
     });
 
     proc.stdout.on('data', (data: Buffer) => {
