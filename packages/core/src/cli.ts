@@ -762,7 +762,7 @@ async function main() {
         // Call a Gmail tool to trigger OAuth — must match the --tools flag used above
         sendJsonRpc({
           jsonrpc: '2.0', id: 2, method: 'tools/call',
-          params: { name: 'search_gmail', arguments: { query: 'test', max_results: 1 } },
+          params: { name: 'list_gmail_labels', arguments: {} },
         });
 
         // Poll for credential files (max 3 minutes)
