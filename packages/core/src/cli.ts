@@ -634,6 +634,7 @@ async function main() {
         const authUrl = await GC.getAuthUrl(credPath, scopes, redirectUri);
 
         const code = await new Promise<string>((resolve, reject) => {
+          let timeoutId: ReturnType<typeof setTimeout>;
           const server = createServer((req, res) => {
             const url = new URL(req.url ?? '/', `http://localhost:9876`);
             if (url.pathname === '/callback') {
@@ -641,12 +642,14 @@ async function main() {
               if (authCode) {
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end('<html><body><h2>Authentication successful!</h2><p>You can close this tab and return to the terminal.</p></body></html>');
+                clearTimeout(timeoutId);
                 server.close();
                 resolve(authCode);
               } else {
                 const error = url.searchParams.get('error') ?? 'No code received';
                 res.writeHead(400, { 'Content-Type': 'text/html' });
                 res.end(`<html><body><h2>Error</h2><p>${error}</p></body></html>`);
+                clearTimeout(timeoutId);
                 server.close();
                 reject(new Error(error));
               }
@@ -665,7 +668,7 @@ async function main() {
           });
 
           // 5-minute timeout
-          setTimeout(() => {
+          timeoutId = setTimeout(() => {
             server.close();
             reject(new Error('Authorization timed out'));
           }, 5 * 60 * 1000);
