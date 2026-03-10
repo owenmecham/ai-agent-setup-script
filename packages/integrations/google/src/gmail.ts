@@ -1,4 +1,4 @@
-import type { GwsClient } from './gws-client.js';
+import type { GoogleClient } from './google-client.js';
 
 export interface ActionResult {
   actionId: string;
@@ -14,7 +14,7 @@ export interface ActionHandler {
   execute: (params: Record<string, unknown>) => Promise<ActionResult>;
 }
 
-export function createGmailHandlers(client: GwsClient): ActionHandler[] {
+export function createGmailHandlers(client: GoogleClient): ActionHandler[] {
   return [
     {
       name: 'google.gmail.search',

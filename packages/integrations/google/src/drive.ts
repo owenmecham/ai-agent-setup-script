@@ -1,11 +1,11 @@
-import type { GwsClient } from './gws-client.js';
+import type { GoogleClient } from './google-client.js';
 import type { ActionHandler } from './gmail.js';
 
-export function createDriveHandlers(client: GwsClient): ActionHandler[] {
+export function createDriveHandlers(client: GoogleClient): ActionHandler[] {
   return [
     {
       name: 'google.drive.list',
-      description: 'List or search Drive files. Params: query (string, optional — Drive query syntax), maxResults (number, optional, default 20)',
+      description: 'List or search Drive files (read-only). Params: query (string, optional — Drive query syntax), maxResults (number, optional, default 20)',
       parameterSchema: {
         type: 'object',
         properties: {
@@ -27,7 +27,7 @@ export function createDriveHandlers(client: GwsClient): ActionHandler[] {
     },
     {
       name: 'google.drive.get',
-      description: 'Get file metadata from Drive. Params: fileId (string)',
+      description: 'Get file metadata from Drive (read-only). Params: fileId (string)',
       parameterSchema: {
         type: 'object',
         required: ['fileId'],
@@ -38,29 +38,6 @@ export function createDriveHandlers(client: GwsClient): ActionHandler[] {
       execute: async (params) => {
         try {
           const file = await client.getDriveFile(params.fileId as string);
-          return { actionId: '', success: true, data: file };
-        } catch (err) {
-          return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-    },
-    {
-      name: 'google.drive.create',
-      description: 'Create a file in Drive. Params: name (string), mimeType (string)',
-      parameterSchema: {
-        type: 'object',
-        required: ['name', 'mimeType'],
-        properties: {
-          name: { type: 'string' },
-          mimeType: { type: 'string', description: 'e.g. "application/vnd.google-apps.document"' },
-        },
-      },
-      execute: async (params) => {
-        try {
-          const file = await client.createDriveFile(
-            params.name as string,
-            params.mimeType as string,
-          );
           return { actionId: '', success: true, data: file };
         } catch (err) {
           return { actionId: '', success: false, error: err instanceof Error ? err.message : String(err) };

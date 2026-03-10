@@ -58,11 +58,6 @@ export default function SettingsPage() {
   });
 
   const [googleAuthLoading, setGoogleAuthLoading] = useState(false);
-  const [googleCredForm, setGoogleCredForm] = useState({ clientId: '', clientSecret: '' });
-  const [googleCredSaving, setGoogleCredSaving] = useState(false);
-  const [googleCredError, setGoogleCredError] = useState<string | null>(null);
-  const [googleCredSuccess, setGoogleCredSuccess] = useState(false);
-  const [showCredForm, setShowCredForm] = useState(false);
   const [agentRestarting, setAgentRestarting] = useState(false);
   const prevAuthenticatedRef = useRef<boolean | null>(null);
   const [plaudInstallLoading, setPlaudInstallLoading] = useState(false);
@@ -81,29 +76,30 @@ export default function SettingsPage() {
     refetchInterval: 30000,
   });
 
-  const [googleFastPoll, setGoogleFastPoll] = useState(false);
-
   const { data: googleStatus, refetch: refetchGoogle } = useQuery({
     queryKey: ['google-auth'],
     queryFn: async () => {
       const res = await fetch('/api/google-auth');
-      const data = await res.json() as {
+      return res.json() as Promise<{
         installed: boolean;
         authenticated: boolean;
         email: string | null;
         error: string | null;
         hasClientCredentials: boolean;
-        authInProgress: boolean;
-        authUrl: string | null;
-        authError: string | null;
-      };
-      // Update fast-polling based on auth state
-      setGoogleFastPoll(data.authInProgress);
-      return data;
+      }>;
     },
-    // Poll every 2s during auth, otherwise every 30s
-    refetchInterval: googleAuthLoading || googleFastPoll ? 2000 : 30000,
+    refetchInterval: 30000,
   });
+
+  // Auto-refetch on redirect back from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google_auth') === 'success') {
+      refetchGoogle();
+      // Clean up the URL
+      window.history.replaceState({}, '', '/settings');
+    }
+  }, [refetchGoogle]);
 
   // Auto-restart agent when auth completes (transition from false -> true)
   useEffect(() => {
@@ -263,7 +259,7 @@ export default function SettingsPage() {
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
           <h3 className="text-lg font-semibold mb-4">Google Workspace</h3>
           <p className="text-sm text-zinc-500 mb-4">
-            Connect your Google account to enable Gmail, Calendar, Tasks, and Drive via the Google MCP server.
+            Connect your Google account to enable Gmail, Calendar, Tasks, and Drive.
           </p>
 
           {/* Status indicator */}
@@ -271,8 +267,7 @@ export default function SettingsPage() {
             <div className={`w-2 h-2 rounded-full ${
               agentRestarting ? 'bg-yellow-500 animate-pulse' :
               googleStatus?.authenticated ? 'bg-green-500' :
-              googleStatus?.authInProgress ? 'bg-blue-500 animate-pulse' :
-              googleStatus?.installed ? 'bg-yellow-500' :
+              googleStatus?.hasClientCredentials ? 'bg-yellow-500' :
               'bg-zinc-600'
             }`} />
             <span className="text-sm">
@@ -280,23 +275,24 @@ export default function SettingsPage() {
                 ? 'Restarting agent to connect Google services...'
                 : googleStatus?.authenticated
                   ? `Connected${googleStatus.email ? ` — ${googleStatus.email}` : ''}`
-                  : googleStatus?.authInProgress
-                    ? 'Authentication in progress...'
-                    : !googleStatus?.installed
-                      ? 'gws CLI not installed'
-                      : 'Not authenticated'}
+                  : !googleStatus?.hasClientCredentials
+                    ? 'Missing credentials'
+                    : 'Not authenticated'}
             </span>
           </div>
 
-          {/* State: gws not installed */}
-          {!googleStatus?.installed && (
+          {/* State: Missing client_secret.json */}
+          {!googleStatus?.hasClientCredentials && (
             <div className="space-y-2">
               <p className="text-sm text-zinc-500">
-                Install gws CLI:{' '}
-                <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">
-                  npm install -g @googleworkspace/cli
-                </code>
+                Download OAuth credentials from Google Cloud Console:
               </p>
+              <ol className="text-sm text-zinc-500 list-decimal list-inside space-y-1">
+                <li>Go to <span className="text-zinc-300">console.cloud.google.com/apis/credentials</span></li>
+                <li>Create OAuth 2.0 Client ID (type: Desktop app)</li>
+                <li>Download JSON and save to <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-xs">~/.config/murph/google/client_secret.json</code></li>
+                <li>Enable APIs: Gmail, Calendar, Drive, Tasks</li>
+              </ol>
               <p className="text-xs text-zinc-600">
                 Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>
               </p>
@@ -304,49 +300,14 @@ export default function SettingsPage() {
           )}
 
           {/* State: Agent restarting */}
-          {googleStatus?.installed && agentRestarting && (
+          {agentRestarting && (
             <p className="text-sm text-zinc-400">
               The agent is restarting to pick up the new Google connection. This happens automatically.
             </p>
           )}
 
-          {/* State: Auth in progress */}
-          {googleStatus?.installed && !agentRestarting && googleStatus?.authInProgress && (
-            <div className="space-y-3">
-              {googleStatus.authUrl ? (
-                <div className="space-y-2">
-                  <p className="text-sm text-zinc-300">
-                    Complete authorization in your browser. If it didn&apos;t open automatically, click the link below:
-                  </p>
-                  <a
-                    href={googleStatus.authUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:text-blue-300 underline break-all block"
-                  >
-                    Open Google Authorization
-                  </a>
-                </div>
-              ) : googleStatus.authError ? (
-                <p className="text-sm text-red-400">{googleStatus.authError}</p>
-              ) : (
-                <p className="text-sm text-zinc-400">Starting authentication...</p>
-              )}
-              <button
-                onClick={async () => {
-                  await fetch('/api/google-auth', { method: 'DELETE' });
-                  setGoogleAuthLoading(false);
-                  await refetchGoogle();
-                }}
-                className="text-sm text-zinc-500 hover:text-red-400 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
           {/* State: Authenticated */}
-          {googleStatus?.installed && !agentRestarting && !googleStatus?.authInProgress && googleStatus?.authenticated && (
+          {!agentRestarting && googleStatus?.hasClientCredentials && googleStatus?.authenticated && (
             <div className="space-y-3">
               <div className="text-sm text-zinc-400">
                 <p className="font-medium text-zinc-300 mb-2">Available services:</p>
@@ -354,7 +315,7 @@ export default function SettingsPage() {
                   <li>Gmail — read, search, send email</li>
                   <li>Calendar — view and manage events</li>
                   <li>Tasks — manage task lists</li>
-                  <li>Drive — search, read, and manage files</li>
+                  <li>Drive — search and read files (read-only)</li>
                 </ul>
               </div>
               <div className="flex items-center gap-4">
@@ -363,39 +324,48 @@ export default function SettingsPage() {
                     setGoogleAuthLoading(true);
                     const res = await fetch('/api/google-auth', { method: 'POST' });
                     const data = await res.json();
-                    if (data.error) setGoogleAuthLoading(false);
-                    await refetchGoogle();
+                    if (data.authUrl) {
+                      window.location.href = data.authUrl;
+                    } else {
+                      setGoogleAuthLoading(false);
+                    }
                   }}
                   disabled={googleAuthLoading}
                   className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  {googleAuthLoading ? 'Starting...' : 'Re-authenticate'}
+                  {googleAuthLoading ? 'Redirecting...' : 'Re-authenticate'}
                 </button>
                 <button
-                  onClick={() => setShowCredForm(!showCredForm)}
-                  className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+                  onClick={async () => {
+                    await fetch('/api/google-auth', { method: 'DELETE' });
+                    await refetchGoogle();
+                  }}
+                  className="text-sm text-zinc-500 hover:text-red-400 transition-colors"
                 >
-                  Change OAuth Credentials
+                  Disconnect
                 </button>
               </div>
             </div>
           )}
 
-          {/* State: Has CLI, not authenticated, no auth in progress */}
-          {googleStatus?.installed && !agentRestarting && !googleStatus?.authInProgress && !googleStatus?.authenticated && (
+          {/* State: Has credentials, not authenticated */}
+          {!agentRestarting && googleStatus?.hasClientCredentials && !googleStatus?.authenticated && (
             <div className="space-y-3">
               <button
                 onClick={async () => {
                   setGoogleAuthLoading(true);
                   const res = await fetch('/api/google-auth', { method: 'POST' });
                   const data = await res.json();
-                  if (data.error) setGoogleAuthLoading(false);
-                  await refetchGoogle();
+                  if (data.authUrl) {
+                    window.location.href = data.authUrl;
+                  } else {
+                    setGoogleAuthLoading(false);
+                  }
                 }}
                 disabled={googleAuthLoading}
                 className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm transition-colors"
               >
-                {googleAuthLoading ? 'Starting...' : 'Connect Google Account'}
+                {googleAuthLoading ? 'Redirecting...' : 'Connect Google Account'}
               </button>
               <p className="text-xs text-zinc-600">
                 Or run from terminal: <code className="bg-zinc-800/50 px-1 py-0.5 rounded">pnpm murph google-auth</code>

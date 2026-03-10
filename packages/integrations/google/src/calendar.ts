@@ -1,7 +1,7 @@
-import type { GwsClient } from './gws-client.js';
+import type { GoogleClient } from './google-client.js';
 import type { ActionHandler, ActionResult } from './gmail.js';
 
-export function createCalendarHandlers(client: GwsClient): ActionHandler[] {
+export function createCalendarHandlers(client: GoogleClient): ActionHandler[] {
   return [
     {
       name: 'google.calendar.list',

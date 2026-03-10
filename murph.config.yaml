@@ -39,13 +39,6 @@ security:
     google.tasks.complete: notify
     google.drive.list: auto
     google.drive.get: auto
-    google.drive.create: notify
-    google.docs.get: auto
-    google.docs.create: notify
-    google.sheets.get: auto
-    google.sheets.create: notify
-    google.sheets.modify: notify
-    google.chat.send: require
     playwright.*: notify
     cloudflare.deploy: require
     creator.*: require

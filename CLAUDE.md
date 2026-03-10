@@ -21,7 +21,7 @@ Murph is a personal AI agent framework built on top of Claude Code CLI. It runs 
 - `@murph/channel-telegram` — grammY Telegram bot with user allowlist
 - `@murph/channel-imessage` — Direct iMessage database poller + AppleScript sender
 - `@murph/mcp-client` — Multi-server MCP client (stdio + HTTP)
-- `@murph/integration-google` — Native Google Workspace integration (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Chat) via `gws` CLI
+- `@murph/integration-google` — Native Google Workspace integration (Gmail, Calendar, Tasks, Drive read-only) via `googleapis` SDK
 - `@murph/integration-bop` — BOP Framework hive mind (WebSocket provider + consumer)
 - `@murph/scheduler` — croner-based cron engine with natural language parsing
 - `@murph/creator` — Dynamic software creation + Cloudflare Pages deployment
@@ -79,23 +79,25 @@ PostgreSQL with tables: messages, entities, memories (pgvector), audit_log, secr
 
 ## Google Workspace Integration
 
-Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Chat) is integrated natively via the `@murph/integration-google` package, which wraps the [`gws` CLI](https://github.com/googleworkspace/cli) (`@googleworkspace/cli`).
+Google Workspace (Gmail, Calendar, Tasks, Drive) is integrated natively via the `@murph/integration-google` package using the official `googleapis` and `google-auth-library` Node.js SDKs.
 
 **Requirements:**
-- `gws` CLI (installed via `npm install -g @googleworkspace/cli`)
-- Google Cloud project with OAuth 2.0 **Desktop app** credentials (download `client_secret.json` to `~/.config/gws/`)
-- Enable required APIs: Gmail, Calendar, Drive, Tasks, Docs, Sheets, Chat
+- `googleapis` + `google-auth-library` (auto-installed as package dependencies, no global install needed)
+- Google Cloud project with OAuth 2.0 **Desktop app** credentials
+- Download `client_secret.json` to `~/.config/murph/google/`
+- Enable required APIs: Gmail, Calendar, Drive, Tasks
 
-**Setup:** `pnpm murph google-auth` — checks for `gws` CLI (installs if missing), runs `gws auth login` which opens browser for OAuth consent. If already authenticated, prompts to re-authenticate. Can also be triggered from the dashboard Settings page.
+**Setup:** `pnpm murph google-auth` — checks for `client_secret.json`, starts a local HTTP server on port 9876, opens browser for OAuth consent, exchanges the authorization code, and saves `token.json`. If already authenticated, prompts to re-authenticate. Can also be triggered from the dashboard Settings page.
 
 **How it works:**
-- `@murph/integration-google` provides a `GwsClient` class that shells out to `gws` CLI commands and parses JSON output
+- `@murph/integration-google` provides a `GoogleClient` class that uses the `googleapis` SDK directly
 - Tools are registered in the `google.*` namespace in the action registry (e.g. `google.gmail.search`, `google.calendar.list`)
-- `gws` handles token refresh automatically — access tokens expire after 1 hour and are refreshed using the stored refresh_token
-- OAuth credentials are stored and encrypted by `gws` itself in `~/.config/gws/` (AES-256-GCM)
-- `gws` uses dynamic scope minimization — only requests scopes needed for each API method
-- No environment variables needed (`GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` are no longer required)
+- Token refresh is handled automatically by the `google-auth-library` OAuth2Client — access tokens expire after 1 hour and are refreshed using the stored refresh_token
+- OAuth credentials stored at `~/.config/murph/google/client_secret.json`
+- Tokens stored at `~/.config/murph/google/token.json` (auto-refreshed, auto-persisted)
+- No environment variables needed
 - Write actions go through approval gates; read actions are auto-approved
+- Drive access is read-only (`drive.readonly` scope)
 - If Google revokes the token, the agent logs a warning; re-run `pnpm murph google-auth`
 
 **Approval defaults for Google actions:**
@@ -116,13 +118,6 @@ Google Workspace (Gmail, Calendar, Tasks, Drive, Docs, Sheets, Chat) is integrat
 - `google.tasks.complete` → `notify`
 - `google.drive.list` → `auto`
 - `google.drive.get` → `auto`
-- `google.drive.create` → `notify`
-- `google.docs.get` → `auto`
-- `google.docs.create` → `notify`
-- `google.sheets.get` → `auto`
-- `google.sheets.create` → `notify`
-- `google.sheets.modify` → `notify`
-- `google.chat.send` → `require`
 
 ## Plaud Integration
 

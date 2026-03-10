@@ -1,7 +1,7 @@
-import type { GwsClient } from './gws-client.js';
+import type { GoogleClient } from './google-client.js';
 import type { ActionHandler } from './gmail.js';
 
-export function createTasksHandlers(client: GwsClient): ActionHandler[] {
+export function createTasksHandlers(client: GoogleClient): ActionHandler[] {
   return [
     {
       name: 'google.tasks.list',

@@ -1,148 +1,97 @@
 import { NextResponse } from 'next/server';
-import { execSync, spawn, type ChildProcess } from 'child_process';
+import { existsSync, unlinkSync } from 'fs';
 import { homedir } from 'os';
-
-// Module-level state persists between requests within the Next.js server process
-let authState: {
-  proc: ChildProcess;
-  error: string | null;
-  startedAt: number;
-} | null = null;
+import { join } from 'path';
 
 const HOME = homedir();
-
-function isGwsInstalled(): boolean {
-  try {
-    execSync('which gws', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function checkAuthStatus(): { authenticated: boolean; email: string | null; error?: string } {
-  try {
-    const result = execSync('gws gmail users.getProfile --user-id me', {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 15000,
-      encoding: 'utf-8',
-    });
-    const data = JSON.parse(result);
-    return { authenticated: true, email: data?.emailAddress ?? null };
-  } catch {
-    return { authenticated: false, email: null, error: 'Not authenticated — run: pnpm murph google-auth' };
-  }
-}
-
-function cleanupAuthProcess() {
-  if (authState) {
-    try {
-      authState.proc.kill();
-    } catch {
-      // already dead
-    }
-    authState = null;
-  }
-}
+const CONFIG_DIR = join(HOME, '.config', 'murph', 'google');
+const CRED_PATH = join(CONFIG_DIR, 'client_secret.json');
+const TOKEN_PATH = join(CONFIG_DIR, 'token.json');
 
 // GET — check auth status
 export async function GET() {
-  const installed = isGwsInstalled();
-  const status = installed ? checkAuthStatus() : { authenticated: false, email: null, error: 'gws CLI not installed' };
+  const hasClientCredentials = existsSync(CRED_PATH);
+  const hasToken = existsSync(TOKEN_PATH);
 
-  // If auth just completed, clean up the process state
-  if (authState && status.authenticated) {
-    cleanupAuthProcess();
+  if (!hasClientCredentials) {
+    return NextResponse.json({
+      installed: true, // no external CLI needed
+      authenticated: false,
+      email: null,
+      hasClientCredentials: false,
+      error: 'Missing client_secret.json — download from Google Cloud Console',
+    });
   }
 
-  // Check if auth process timed out (5 minutes)
-  if (authState && Date.now() - authState.startedAt > 5 * 60 * 1000) {
-    cleanupAuthProcess();
+  if (!hasToken) {
+    return NextResponse.json({
+      installed: true,
+      authenticated: false,
+      email: null,
+      hasClientCredentials: true,
+      error: 'Not authenticated — click Connect Google Account',
+    });
   }
 
-  return NextResponse.json({
-    installed,
-    authenticated: status.authenticated,
-    email: status.email ?? null,
-    error: status.error ?? null,
-    hasClientCredentials: true, // gws manages its own credentials
-    authInProgress: authState !== null,
-    authUrl: null, // gws handles browser opening internally
-    authError: authState?.error ?? null,
-  });
+  // Try to validate the token
+  try {
+    const { GoogleClient } = await import('@murph/integration-google');
+    const client = new GoogleClient({ credentialsPath: CRED_PATH, tokenPath: TOKEN_PATH });
+    await client.init();
+    const authenticated = await client.isAuthenticated();
+
+    return NextResponse.json({
+      installed: true,
+      authenticated,
+      email: null,
+      hasClientCredentials: true,
+      error: authenticated ? null : 'Token expired — re-authenticate',
+    });
+  } catch (err) {
+    return NextResponse.json({
+      installed: true,
+      authenticated: false,
+      email: null,
+      hasClientCredentials: true,
+      error: err instanceof Error ? err.message : 'Failed to validate token',
+    });
+  }
 }
 
-// POST — start non-blocking auth flow
+// POST — generate auth URL and redirect
 export async function POST() {
-  if (!isGwsInstalled()) {
+  if (!existsSync(CRED_PATH)) {
     return NextResponse.json(
-      { error: 'gws CLI not installed. Run: npm install -g @googleworkspace/cli' },
+      { error: 'Missing client_secret.json. Download from Google Cloud Console and save to ~/.config/murph/google/' },
       { status: 400 },
     );
   }
 
-  // Kill any existing auth process
-  cleanupAuthProcess();
-
   try {
-    const proc = spawn('gws', ['auth', 'login'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const { GoogleClient, GOOGLE_SCOPES } = await import('@murph/integration-google');
+    const redirectUri = 'http://localhost:3141/api/google-auth/callback';
+    const authUrl = await GoogleClient.getAuthUrl(CRED_PATH, GOOGLE_SCOPES, redirectUri);
 
-    authState = {
-      proc,
-      error: null,
-      startedAt: Date.now(),
-    };
-
-    proc.on('close', (code) => {
-      if (authState?.proc === proc) {
-        if (code !== 0) {
-          authState.error = `Auth process exited with code ${code}`;
-          setTimeout(() => {
-            if (authState?.proc === proc) authState = null;
-          }, 30000);
-        } else {
-          // Success — let GET detect via checkAuthStatus()
-        }
-      }
-    });
-
-    proc.on('error', (err) => {
-      if (authState?.proc === proc) {
-        authState.error = err.message;
-      }
-    });
-
-    // 5-minute overall timeout
-    setTimeout(() => {
-      if (authState?.proc === proc) {
-        try { proc.kill(); } catch {}
-        authState = null;
-      }
-    }, 5 * 60 * 1000);
-
-    return NextResponse.json({
-      started: true,
-      authUrl: null,
-      error: null,
-    });
+    return NextResponse.json({ authUrl });
   } catch (err) {
-    cleanupAuthProcess();
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to start auth flow' },
+      { error: err instanceof Error ? err.message : 'Failed to generate auth URL' },
       { status: 500 },
     );
   }
 }
 
-// PUT — no-op (gws manages its own credentials, kept for API compatibility)
-export async function PUT() {
-  return NextResponse.json({ success: true, message: 'gws manages credentials internally. Use gws auth login.' });
-}
-
-// DELETE — cancel in-progress auth
+// DELETE — disconnect (remove token)
 export async function DELETE() {
-  cleanupAuthProcess();
-  return NextResponse.json({ success: true });
+  try {
+    if (existsSync(TOKEN_PATH)) {
+      unlinkSync(TOKEN_PATH);
+    }
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to remove token' },
+      { status: 500 },
+    );
+  }
 }

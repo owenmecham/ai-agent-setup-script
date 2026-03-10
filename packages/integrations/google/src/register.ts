@@ -1,11 +1,8 @@
-import type { GwsClient } from './gws-client.js';
+import type { GoogleClient } from './google-client.js';
 import { createGmailHandlers } from './gmail.js';
 import { createCalendarHandlers } from './calendar.js';
 import { createTasksHandlers } from './tasks.js';
 import { createDriveHandlers } from './drive.js';
-import { createDocsHandlers } from './docs.js';
-import { createSheetsHandlers } from './sheets.js';
-import { createChatHandlers } from './chat.js';
 
 interface ActionRegistry {
   register(handler: {
@@ -18,17 +15,14 @@ interface ActionRegistry {
 
 /**
  * Register all Google Workspace action handlers in the given registry.
- * Each handler delegates to GwsClient methods.
+ * Each handler delegates to GoogleClient methods.
  */
-export function registerGoogleTools(registry: ActionRegistry, client: GwsClient): void {
+export function registerGoogleTools(registry: ActionRegistry, client: GoogleClient): void {
   const allHandlers = [
     ...createGmailHandlers(client),
     ...createCalendarHandlers(client),
     ...createTasksHandlers(client),
     ...createDriveHandlers(client),
-    ...createDocsHandlers(client),
-    ...createSheetsHandlers(client),
-    ...createChatHandlers(client),
   ];
 
   for (const handler of allHandlers) {

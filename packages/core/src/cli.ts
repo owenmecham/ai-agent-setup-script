@@ -203,13 +203,14 @@ async function main() {
       }
 
       // Wire up native Google Workspace integration
-      let gwsClient: any = null;
+      let googleClient: any = null;
       try {
         const googleMod = await import('@murph/integration-google');
-        gwsClient = new googleMod.GwsClient();
-        if (await gwsClient.isAuthenticated()) {
-          googleMod.registerGoogleTools(agent.getRegistry(), gwsClient);
-          logger.info('Google Workspace connected (native gws)');
+        googleClient = new googleMod.GoogleClient();
+        await googleClient.init();
+        if (await googleClient.isAuthenticated()) {
+          googleMod.registerGoogleTools(agent.getRegistry(), googleClient);
+          logger.info('Google Workspace connected (googleapis SDK)');
         } else {
           logger.warn('Google Workspace not authenticated — run: pnpm murph google-auth');
         }
@@ -397,11 +398,11 @@ async function main() {
 
       // Wire up email maintenance engine
       let emailMaintenanceEngine: import('./email-maintenance.js').EmailMaintenanceEngine | null = null;
-      if (config.email_maintenance.enabled && gwsClient) {
+      if (config.email_maintenance.enabled && googleClient) {
         try {
           const { EmailMaintenanceEngine } = await import('./email-maintenance.js');
           const emPool = getPool(config.database.url);
-          emailMaintenanceEngine = new EmailMaintenanceEngine(gwsClient, emPool, config.agent.timezone);
+          emailMaintenanceEngine = new EmailMaintenanceEngine(googleClient, emPool, config.agent.timezone);
           emailMaintenanceEngine.startCron(config.email_maintenance);
           agent.setEmailMaintenance(emailMaintenanceEngine);
           logger.info('Email maintenance engine started');
@@ -420,11 +421,11 @@ async function main() {
               if (emailMaintenanceEngine) {
                 emailMaintenanceEngine.reconfigure(event.current.email_maintenance);
                 logger.info('Email maintenance engine reconfigured');
-              } else if (event.current.email_maintenance.enabled && gwsClient) {
+              } else if (event.current.email_maintenance.enabled && googleClient) {
                 // Engine wasn't created before, create now
                 import('./email-maintenance.js').then(({ EmailMaintenanceEngine }) => {
                   const emPool = getPool(config.database.url);
-                  emailMaintenanceEngine = new EmailMaintenanceEngine(gwsClient!, emPool, event.current.agent.timezone);
+                  emailMaintenanceEngine = new EmailMaintenanceEngine(googleClient!, emPool, event.current.agent.timezone);
                   emailMaintenanceEngine.startCron(event.current.email_maintenance);
                   agent.setEmailMaintenance(emailMaintenanceEngine);
                   logger.info('Email maintenance engine started after config change');
@@ -570,38 +571,43 @@ async function main() {
     }
 
     case 'google-auth': {
-      const { execSync, spawn: spawnAsync } = await import('node:child_process');
+      const { existsSync } = await import('node:fs');
       const { createInterface } = await import('node:readline');
+      const { createServer } = await import('node:http');
+      const { execSync: execSyncAuth } = await import('node:child_process');
 
-      console.log('Google Workspace Setup (gws CLI)');
+      const configDir = `${process.env.HOME ?? ''}/.config/murph/google`;
+      const credPath = `${configDir}/client_secret.json`;
+      const tokenPath = `${configDir}/token.json`;
+
+      console.log('Google Workspace Setup');
       console.log('─'.repeat(50));
       console.log('');
 
-      // 1. Check/install gws CLI
-      let gwsAvailable = false;
-      try {
-        execSync('which gws', { stdio: 'ignore' });
-        gwsAvailable = true;
-      } catch {}
-
-      if (!gwsAvailable) {
-        console.log('Installing @googleworkspace/cli...');
-        try {
-          execSync('npm install -g @googleworkspace/cli', { stdio: 'inherit' });
-          console.log('✓ gws CLI installed');
-        } catch {
-          console.error('✗ Failed to install @googleworkspace/cli');
-          console.error('  Try manually: npm install -g @googleworkspace/cli');
-          process.exit(1);
-        }
-      } else {
-        console.log('✓ gws CLI is available');
+      // 1. Check for client_secret.json
+      if (!existsSync(credPath)) {
+        console.log('Missing Google OAuth credentials.');
+        console.log('');
+        console.log('Setup instructions:');
+        console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
+        console.log('  2. Create a project (or select existing)');
+        console.log('  3. Create OAuth 2.0 Client ID (type: Desktop app)');
+        console.log('  4. Download the JSON and save to:');
+        console.log(`     ${credPath}`);
+        console.log('  5. Enable these APIs: Gmail, Calendar, Drive, Tasks');
+        console.log('  6. Re-run: pnpm murph google-auth');
+        process.exit(1);
       }
+      console.log('✓ client_secret.json found');
 
-      // 2. Check current auth status
-      const { spawnSync: spawnSyncCheck } = await import('node:child_process');
-      const authCheck = spawnSyncCheck('gws', ['gmail', 'users.getProfile', '--user-id', 'me'], { stdio: ['pipe', 'pipe', 'pipe'] });
-      const alreadyAuthenticated = authCheck.status === 0;
+      // 2. Check existing auth
+      const { GoogleClient: GC, GOOGLE_SCOPES: scopes } = await import('@murph/integration-google');
+      let alreadyAuthenticated = false;
+      try {
+        const testClient = new GC({ credentialsPath: credPath, tokenPath });
+        await testClient.init();
+        alreadyAuthenticated = await testClient.isAuthenticated();
+      } catch {}
 
       if (alreadyAuthenticated) {
         console.log('');
@@ -616,34 +622,62 @@ async function main() {
         }
       }
 
-      // 3. Run gws auth login (opens browser for OAuth consent)
+      // 3. Start temporary HTTP server and open browser
       console.log('');
       console.log('Starting Google authorization...');
       console.log('A browser window will open for Google OAuth consent.');
       console.log('');
-      console.log('If you haven\'t set up a Google Cloud project yet:');
-      console.log('  1. Go to https://console.cloud.google.com/apis/credentials');
-      console.log('  2. Create a project and OAuth 2.0 Client ID (type: Desktop app)');
-      console.log('  3. Download the client_secret.json to ~/.config/gws/');
-      console.log('  4. Enable the APIs you need (Gmail, Calendar, Drive, Tasks, etc.)');
-      console.log('');
+
+      const redirectUri = 'http://localhost:9876/callback';
 
       try {
-        const authProc = spawnAsync('gws', ['auth', 'login'], {
-          stdio: 'inherit',
-        });
+        const authUrl = await GC.getAuthUrl(credPath, scopes, redirectUri);
 
-        await new Promise<void>((resolve, reject) => {
-          authProc.on('close', (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`gws auth login exited with code ${code}`));
+        const code = await new Promise<string>((resolve, reject) => {
+          const server = createServer((req, res) => {
+            const url = new URL(req.url ?? '/', `http://localhost:9876`);
+            if (url.pathname === '/callback') {
+              const authCode = url.searchParams.get('code');
+              if (authCode) {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end('<html><body><h2>Authentication successful!</h2><p>You can close this tab and return to the terminal.</p></body></html>');
+                server.close();
+                resolve(authCode);
+              } else {
+                const error = url.searchParams.get('error') ?? 'No code received';
+                res.writeHead(400, { 'Content-Type': 'text/html' });
+                res.end(`<html><body><h2>Error</h2><p>${error}</p></body></html>`);
+                server.close();
+                reject(new Error(error));
+              }
+            }
           });
-          authProc.on('error', reject);
+
+          server.listen(9876, () => {
+            console.log('Waiting for authorization...');
+            try {
+              execSyncAuth(`open "${authUrl}"`, { stdio: 'ignore' });
+            } catch {
+              console.log('Could not open browser automatically.');
+              console.log('Open this URL in your browser:');
+              console.log(`  ${authUrl}`);
+            }
+          });
+
+          // 5-minute timeout
+          setTimeout(() => {
+            server.close();
+            reject(new Error('Authorization timed out'));
+          }, 5 * 60 * 1000);
         });
 
-        // Verify auth worked
-        const verifyCheck = spawnSyncCheck('gws', ['gmail', 'users.getProfile', '--user-id', 'me'], { stdio: ['pipe', 'pipe', 'pipe'] });
-        const verified = verifyCheck.status === 0;
+        // Exchange code for tokens
+        await GC.exchangeCode(credPath, tokenPath, code, redirectUri);
+
+        // Verify
+        const verifyClient = new GC({ credentialsPath: credPath, tokenPath });
+        await verifyClient.init();
+        const verified = await verifyClient.isAuthenticated();
 
         console.log('');
         if (verified) {
@@ -658,21 +692,18 @@ async function main() {
         console.error(`  ${err instanceof Error ? err.message : String(err)}`);
         console.error('');
         console.error('Troubleshooting:');
-        console.error('  - Ensure you have a client_secret.json in ~/.config/gws/');
-        console.error('  - Or run: gws auth setup (requires gcloud CLI)');
+        console.error('  - Ensure client_secret.json is valid (Desktop app type)');
+        console.error('  - Enable the required APIs in Google Cloud Console');
         console.error('  - Then re-run: pnpm murph google-auth');
         process.exit(1);
       }
 
       console.log('');
-      console.log('Google Workspace is connected via gws. Available services:');
+      console.log('Google Workspace is connected. Available services:');
       console.log('  • Gmail — read, search, send email');
       console.log('  • Calendar — view and manage events');
       console.log('  • Tasks — manage task lists');
-      console.log('  • Drive — search, read, and manage files');
-      console.log('  • Docs — read and edit documents');
-      console.log('  • Sheets — read and edit spreadsheets');
-      console.log('  • Chat — send messages');
+      console.log('  • Drive — search and read files (read-only)');
       console.log('');
       console.log('Restart Murph to activate: pnpm murph start');
       break;

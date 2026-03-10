@@ -236,39 +236,59 @@ export async function runDoctor(): Promise<DoctorResult> {
     // Config loading failed — already reported above
   }
 
-  // 6. Google Workspace (gws CLI)
-  const gwsResult = await spawnCheck('gws', ['--version']);
-  if (gwsResult.code === 0) {
-    checks.push({ name: 'gws CLI', status: 'pass', message: `Installed: ${gwsResult.stdout.trim()}` });
+  // 6. Google Workspace (googleapis SDK)
+  try {
+    const { existsSync } = await import('node:fs');
+    const home = process.env.HOME ?? '';
+    const credPath = `${home}/.config/murph/google/client_secret.json`;
+    const tokenPath = `${home}/.config/murph/google/token.json`;
 
-    // Verify auth by running a lightweight gws command
-    const authResult = await spawnCheck('gws', ['gmail', 'users.getProfile', '--user-id', 'me']);
-    if (authResult.code === 0) {
-      let email = '';
-      try {
-        const profile = JSON.parse(authResult.stdout);
-        email = profile?.emailAddress ?? '';
-      } catch {}
+    if (!existsSync(credPath)) {
       checks.push({
-        name: 'Google auth',
-        status: 'pass',
-        message: email ? `Authenticated as ${email}` : 'Authenticated',
+        name: 'Google credentials',
+        status: 'warn',
+        message: 'client_secret.json not found',
+        fix: `Download from Google Cloud Console and save to ${credPath}`,
       });
     } else {
-      checks.push({
-        name: 'Google auth',
-        status: 'warn',
-        message: 'Not authenticated',
-        fix: 'Run: pnpm murph google-auth',
-      });
+      checks.push({ name: 'Google credentials', status: 'pass', message: 'client_secret.json found' });
+
+      if (!existsSync(tokenPath)) {
+        checks.push({
+          name: 'Google auth',
+          status: 'warn',
+          message: 'Not authenticated (no token.json)',
+          fix: 'Run: pnpm murph google-auth',
+        });
+      } else {
+        // Try to validate the token
+        try {
+          const { GoogleClient } = await import('@murph/integration-google');
+          const client = new GoogleClient({ credentialsPath: credPath, tokenPath });
+          await client.init();
+          const authenticated = await client.isAuthenticated();
+          if (authenticated) {
+            checks.push({ name: 'Google auth', status: 'pass', message: 'Authenticated' });
+          } else {
+            checks.push({
+              name: 'Google auth',
+              status: 'warn',
+              message: 'Token exists but authentication failed (may be expired)',
+              fix: 'Run: pnpm murph google-auth',
+            });
+          }
+        } catch (err) {
+          checks.push({
+            name: 'Google auth',
+            status: 'warn',
+            message: `Token validation failed: ${err instanceof Error ? err.message : String(err)}`,
+            fix: 'Run: pnpm murph google-auth',
+          });
+        }
+      }
     }
-  } else {
-    checks.push({
-      name: 'gws CLI',
-      status: 'warn',
-      message: 'gws CLI not installed (Google Workspace will not connect)',
-      fix: 'Install: npm install -g @googleworkspace/cli',
-    });
+  } catch {
+    // Skip if fs import fails
   }
 
   // 7. Obsidian

@@ -1,6 +1,6 @@
-export { GwsClient, GwsError, GwsAuthError } from './gws-client.js';
+export { GoogleClient, GoogleApiError, GoogleAuthError, GOOGLE_SCOPES } from './google-client.js';
 export { registerGoogleTools } from './register.js';
-export type { GoogleService } from './types.js';
+export type { GoogleService, GoogleClientConfig } from './types.js';
 export type {
   GmailMessage,
   GmailMessageDetail,
@@ -11,6 +11,4 @@ export type {
   Task,
   TaskInput,
   DriveFile,
-  DocContent,
-  SheetData,
 } from './types.js';

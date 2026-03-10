@@ -69,25 +69,12 @@ export interface DriveFile {
   size?: string;
 }
 
-export interface DocContent {
-  documentId: string;
-  title: string;
-  body: string;
+export interface GoogleClientConfig {
+  credentialsPath: string;
+  tokenPath: string;
 }
 
-export interface SheetData {
-  spreadsheetId: string;
-  title: string;
-  values: unknown[][];
-}
-
-export interface GwsExecResult {
-  stdout: string;
-  stderr: string;
-  code: number;
-}
-
-/** Interface for email-maintenance to consume Google services without knowing about gws internals. */
+/** Interface for email-maintenance to consume Google services without knowing about implementation details. */
 export interface GoogleService {
   searchEmails(query: string, maxResults: number): Promise<Array<{ id: string; subject: string; from: string; date: string; body: string }>>;
   getEmail(messageId: string): Promise<{ id: string; subject: string; from: string; to: string; date: string; body: string } | null>;

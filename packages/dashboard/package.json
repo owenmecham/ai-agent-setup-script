@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@murph/config": "workspace:*",
+    "@murph/integration-google": "workspace:*",
     "@murph/security": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "next": "^15.1.0",
