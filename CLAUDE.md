@@ -105,9 +105,9 @@ Google Workspace (Gmail, Calendar, Tasks, Drive) is integrated natively via the 
 - `google.gmail.get` → `auto`
 - `google.gmail.modify` → `notify`
 - `google.gmail.archive` → `notify`
-- `google.gmail.send` → `require`
+- `google.gmail.send` → `notify`
 - `google.gmail.draft` → `notify`
-- `google.gmail.reply` → `require`
+- `google.gmail.reply` → `notify`
 - `google.gmail.labels.list` → `auto`
 - `google.gmail.labels.create` → `notify`
 - `google.calendar.list` → `auto`
