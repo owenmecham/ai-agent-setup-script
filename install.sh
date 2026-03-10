@@ -283,13 +283,14 @@ if [ -x /opt/homebrew/bin/brew ] || [ -x /usr/local/bin/brew ]; then
 else
   installing
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  # Add brew to PATH for the rest of this script (Apple Silicon or Intel)
-  if [ -x /opt/homebrew/bin/brew ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  elif [ -x /usr/local/bin/brew ]; then
-    eval "$(/usr/local/bin/brew shellenv)"
-  fi
   ok
+fi
+
+# Ensure Homebrew dirs are in PATH (brew shellenv is idempotent)
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
 fi
 
 # Define brew() wrapper to ensure native ARM execution on Apple Silicon
