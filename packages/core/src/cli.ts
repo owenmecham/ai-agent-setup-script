@@ -760,9 +760,10 @@ async function main() {
         await new Promise(r => setTimeout(r, 500));
 
         // Call a Gmail tool to trigger OAuth — must match the --tools flag used above
+        // user_google_email is required by the schema; in --single-user mode any value works
         sendJsonRpc({
           jsonrpc: '2.0', id: 2, method: 'tools/call',
-          params: { name: 'list_gmail_labels', arguments: {} },
+          params: { name: 'list_gmail_labels', arguments: { user_google_email: 'auth@pending' } },
         });
 
         // Poll for credential files (max 3 minutes)
