@@ -203,12 +203,12 @@ async function main() {
       }
 
       // Wire up native Google Workspace integration
-      let gwsClient: import('@murph/integration-google').GwsClient | null = null;
+      let gwsClient: any = null;
       try {
-        const { GwsClient, registerGoogleTools } = await import('@murph/integration-google');
-        gwsClient = new GwsClient();
+        const googleMod = await import('@murph/integration-google');
+        gwsClient = new googleMod.GwsClient();
         if (await gwsClient.isAuthenticated()) {
-          registerGoogleTools(agent.getRegistry(), gwsClient);
+          googleMod.registerGoogleTools(agent.getRegistry(), gwsClient);
           logger.info('Google Workspace connected (native gws)');
         } else {
           logger.warn('Google Workspace not authenticated — run: pnpm murph google-auth');
@@ -599,9 +599,9 @@ async function main() {
       }
 
       // 2. Check current auth status
-      const { GwsClient } = await import('@murph/integration-google');
-      const authCheckClient = new GwsClient();
-      const alreadyAuthenticated = await authCheckClient.isAuthenticated();
+      const { spawnSync: spawnSyncCheck } = await import('node:child_process');
+      const authCheck = spawnSyncCheck('gws', ['gmail', 'users.getProfile', '--user-id', 'me'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      const alreadyAuthenticated = authCheck.status === 0;
 
       if (alreadyAuthenticated) {
         console.log('');
@@ -642,8 +642,8 @@ async function main() {
         });
 
         // Verify auth worked
-        const verifyClient = new GwsClient();
-        const verified = await verifyClient.isAuthenticated();
+        const verifyCheck = spawnSyncCheck('gws', ['gmail', 'users.getProfile', '--user-id', 'me'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        const verified = verifyCheck.status === 0;
 
         console.log('');
         if (verified) {
